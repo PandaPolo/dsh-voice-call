@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-voice — voice notes in, spoken answers out</title>
+<style>
+  /* ------------------------------------------------------------------ *
+   * dsh-voice promo slideshow — self-contained, no external assets.
+   * 1280x720 stage, scaled to fit any window. Advance with → / space,
+   * go back with ←, jump with Home/End, fullscreen with F.
+   *
+   * The voice studio: near-black recording-room darkness, one warm amber
+   * "voice" signal, and a live voice meter (a pulsing waveform strip) as
+   * the signature — the one element that says audio without a single icon.
+   * ------------------------------------------------------------------ */
+
+  :root {
+    --ink: #06080f;          /* recording-room darkness */
+    --panel: #0c1120;        /* raised surfaces */
+    --panel-2: #090d18;      /* inset wells / terminals */
+    --paper: #e9edf6;        /* primary text */
+    --muted: #7d8aa6;        /* secondary text */
+    --line: rgba(122, 140, 180, 0.20);   /* hairlines */
+    --voice: #ffb454;        /* warm amber — the spoken signal */
+    --voice-ink: #201304;
+    --danger: #e5484d;       /* the wall of output */
+    --display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; margin: 0; }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: radial-gradient(1100px 700px at 72% -8%, #0b1120 0%, #04050a 58%) fixed, #04050a;
+    font-family: var(--display);
+    color: var(--paper);
+  }
+
+  /* --- stage: fixed 1280x720, scaled to fit -------------------------- */
+  .stage {
+    width: 1280px;
+    height: 720px;
+    position: relative;
+    overflow: hidden;
+    background:
+      linear-gradient(180deg, rgba(255,180,84,0.045), transparent 30%),
+      radial-gradient(800px 460px at 20% 112%, rgba(255,180,84,0.06), transparent 60%),
+      var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 40px 120px rgba(0,0,0,0.55);
+    transform-origin: center center;
+  }
+
+  /* --- the signature: a live voice meter ----------------------------- */
+  .meter {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 64px;
+  }
+  .meter .bar {
+    flex: 1;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--voice);
+    transform: scaleY(0.10);
+    transform-origin: center;
+    opacity: 0.85;
+    animation: voicePulse 1.1s ease-in-out infinite;
+    animation-delay: calc(var(--i, 0) * -0.11s);
+  }
+  .meter.quiet .bar { background: var(--line); animation: none; transform: scaleY(0.10); }
+  .meter.quiet .bar.hot { background: var(--voice); animation: voicePulse 1.1s ease-in-out infinite; animation-delay: calc(var(--i, 0) * -0.11s); }
+  @keyframes voicePulse {
+    0%, 100% { transform: scaleY(0.10); }
+    30% { transform: scaleY(var(--peak, 0.9)); }
+    60% { transform: scaleY(0.35); }
+  }
+  .meter.slim { height: 40px; }
+
+  /* a single pulsing record dot */
+  .rec {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--danger);
+    animation: recBlink 1.6s ease-in-out infinite;
+  }
+  @keyframes recBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  /* --- slides -------------------------------------------------------- */
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    padding: 60px 92px 86px;
+  }
+  .slide.active { display: flex; }
+
+  .slide .r { opacity: 0; transform: translateY(16px); }
+  .slide.active .r { animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; animation-delay: calc(var(--d, 0) * 1ms + 140ms); }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--voice);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .eyebrow::before { content: "//"; color: var(--muted); }
+
+  h1, h2, .giant {
+    margin: 0;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: -0.03em;
+    line-height: 0.93;
+    color: var(--paper);
+  }
+  h1 { font-size: 118px; letter-spacing: -0.035em; }
+  h2 { font-size: 68px; }
+
+  .sub { color: var(--muted); font-size: 27px; font-weight: 600; }
+  .sub b { color: var(--paper); font-weight: 750; }
+
+  /* --- chrome: wordmark / dots / counter / hint ---------------------- */
+  .chrome {
+    position: absolute;
+    left: 92px; right: 92px; bottom: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .wordmark {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .wordmark .dotmark { width: 8px; height: 8px; border-radius: 50%; background: var(--voice); }
+  .dots { display: flex; gap: 10px; }
+  .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    border: 0;
+    padding: 0;
+    background: var(--line);
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+  .dot:hover { background: var(--muted); }
+  .dot[aria-current="true"] { background: var(--voice); transform: scale(1.25); }
+  .dot:focus-visible { outline: 2px solid var(--voice); outline-offset: 3px; }
+  .counter {
+    font-family: var(--mono);
+    font-size: 14px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+  }
+  .counter b { color: var(--paper); font-weight: 700; }
+
+  .hint {
+    position: absolute;
+    left: 50%; bottom: 80px;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: rgba(6,8,15,0.8);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 16px;
+    opacity: 1;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .hint.gone { opacity: 0; }
+
+  /* --- slide 1: hero ------------------------------------------------ */
+  .hero-meters { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 40px 92px; pointer-events: none; opacity: 0.5; }
+  .hero-copy { position: relative; z-index: 2; margin-top: auto; margin-bottom: auto; }
+  .hero-copy .eyebrow { margin-bottom: 20px; }
+  .hero-copy h1 { margin-bottom: 24px; }
+  .hero-copy h1 .amp { color: var(--voice); }
+  .hero-tags { display: flex; gap: 14px; margin-top: 36px; flex-wrap: wrap; }
+  .tag {
+    font-family: var(--mono);
+    font-size: 15px;
+    letter-spacing: 0.06em;
+    color: var(--paper);
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: 999px;
+    padding: 9px 18px;
+  }
+  .tag b { color: var(--voice); font-weight: 700; }
+
+  /* --- slide 2: two tools ------------------------------------------- */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 52px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 38px 42px 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .card .kicker {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--voice);
+  }
+  .card h3 { margin: 0; font-size: 46px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.02em; line-height: 1; }
+  .card p { margin: 0; color: var(--muted); font-size: 21px; line-height: 1.5; }
+  .card p b { color: var(--paper); font-weight: 700; }
+
+  /* --- slide 3: the pain -------------------------------------------- */
+  .moments { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 56px; flex: 1; }
+  .moment {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 34px 38px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    justify-content: space-between;
+  }
+  .moment .n { font-family: var(--mono); font-size: 14px; letter-spacing: 0.24em; color: var(--danger); font-weight: 700; }
+  .moment h3 { margin: 0; font-size: 40px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.02em; line-height: 1.02; }
+  .moment p { margin: 0; color: var(--muted); font-size: 20px; line-height: 1.5; }
+  .wall {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.55;
+    color: rgba(229, 72, 77, 0.5);
+    max-height: 128px;
+    overflow: hidden;
+    white-space: pre-wrap;
+  }
+
+  /* --- slide 4: the fix --------------------------------------------- */
+  .flow { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 48px; flex: 1; }
+  .leg {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 28px 34px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .leg .dir { font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
+  .leg .dir b { color: var(--voice); }
+  .leg .line { font-size: 25px; font-weight: 750; line-height: 1.3; }
+  .leg .card {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: var(--mono);
+  }
+  .leg .card .play {
+    flex: none;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--voice);
+    color: var(--voice-ink);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 900;
+  }
+  .leg .card .txt { color: var(--paper); font-size: 15px; }
+
+  /* --- slide 5: local-first ----------------------------------------- */
+  .local-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 26px; margin-top: 48px; flex: 1; }
+  .files {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 26px 30px;
+    font-family: var(--mono);
+  }
+  .files .path { color: var(--voice); font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+  .files .row { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; padding: 7px 0; border-top: 1px solid var(--line); }
+  .files .row .sz { color: var(--paper); }
+  .facts { display: flex; flex-direction: column; gap: 14px; justify-content: center; }
+  .fact { display: flex; align-items: baseline; gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); }
+  .fact:last-child { border-bottom: 1px solid var(--line); }
+  .fact .mark { font-family: var(--mono); color: var(--voice); font-weight: 700; font-size: 15px; flex: none; }
+  .fact .t { font-size: 23px; font-weight: 700; line-height: 1.3; }
+  .fact .t code { font-family: var(--mono); font-size: 20px; color: var(--voice); }
+
+  /* --- slide 6: details / commands ---------------------------------- */
+  .term {
+    margin-top: 44px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px 30px;
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    font-family: var(--mono);
+  }
+  .term + .term { margin-top: 16px; }
+  .term .cmd { font-size: 32px; font-weight: 700; color: var(--voice); white-space: nowrap; }
+  .term .desc { color: var(--muted); font-size: 18px; line-height: 1.4; }
+  .term .desc b { color: var(--paper); }
+  .chips { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; }
+  .chip {
+    font-family: var(--mono);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--paper);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 13px 22px;
+  }
+  .chip.offline { border-color: rgba(255,180,84,0.5); color: var(--voice); }
+  .chip.cloud { color: var(--muted); }
+
+  /* --- slide 7: install --------------------------------------------- */
+  .install {
+    margin-top: 56px;
+    background: var(--panel-2);
+    border: 1px solid var(--voice);
+    border-radius: 14px;
+    padding: 30px 36px;
+    box-shadow: 0 0 0 1px rgba(255,180,84,0.16), 0 0 44px rgba(255,180,84,0.10);
+    display: flex;
+    align-items: center;
+    gap: 22px;
+  }
+  .install .line { font-family: var(--mono); font-size: 30px; font-weight: 700; color: var(--paper); white-space: nowrap; }
+  .install .line .prompt { color: var(--voice); }
+  .install .line .pkg { color: var(--voice); }
+  .install .meter { height: 34px; width: 120px; flex: none; }
+
+  /* --- focus visibility ---------------------------------------------- */
+  :focus-visible { outline: 2px solid var(--voice); outline-offset: 4px; border-radius: 4px; }
+
+  /* --- reduced motion: static demo state ----------------------------- */
+  @media (prefers-reduced-motion: reduce) {
+    .slide.active .r { animation: none; opacity: 1; transform: none; }
+    .meter .bar, .meter.quiet .bar.hot { animation: none; transform: scaleY(0.45); }
+    .rec { animation: none; opacity: 0.6; }
+  }
+</style>
+</head>
+<body>
+
+<main class="stage" id="stage" aria-roledescription="slideshow" aria-label="dsh-voice promo">
+  <!-- 1 · hero -->
+  <section class="slide" data-index="0" aria-hidden="true">
+    <div class="hero-meters" aria-hidden="true">
+      <div class="meter" id="heroMeterTop"></div>
+      <div class="meter" id="heroMeterBottom"></div>
+    </div>
+    <div class="hero-copy">
+      <p class="eyebrow r" style="--d:0">DeepSeek Harness · voice layer</p>
+      <h1 class="r" style="--d:60">VOICE NOTES IN.<br><span class="amp">SPOKEN</span> ANSWERS OUT.</h1>
+      <p class="sub r" style="--d:150">A hands-free terminal for DSH.</p>
+      <div class="hero-tags">
+        <span class="tag r" style="--d:230"><b>dictate</b>&nbsp;→ user message</span>
+        <span class="tag r" style="--d:290">replies read aloud</span>
+        <span class="tag r" style="--d:350">local-first</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · what it is -->
+  <section class="slide" data-index="1" aria-hidden="true">
+    <p class="eyebrow r" style="--d:0">What it is</p>
+    <h2 class="r" style="--d:60">TWO TOOLS.<br>NO BLOCKING.</h2>
+    <div class="cards">
+      <div class="card r" style="--d:160">
+        <p class="kicker">transcribe</p>
+        <h3>Dictate</h3>
+        <p>Spoken audio becomes a <b>real user message</b> — the agent answers it like anything you typed.</p>
+        <div class="meter slim" aria-hidden="true"></div>
+      </div>
+      <div class="card r" style="--d:240">
+        <p class="kicker">speak</p>
+        <h3>Listen</h3>
+        <p>Text is read aloud on a <b>background job</b> — the turn returns instantly, playback happens async.</p>
+        <div class="meter slim" aria-hidden="true"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · the pain -->
+  <section class="slide" data-index="2" aria-hidden="true">
+    <p class="eyebrow r" style="--d:0">The pain</p>
+    <h2 class="r" style="--d:60">THE KEYBOARD<br>IS THE BOTTLENECK.</h2>
+    <div class="moments">
+      <div class="moment r" style="--d:160">
+        <span class="n">moment 01 — hands busy</span>
+        <h3>Away from the keyboard</h3>
+        <p>You want to leave an instruction. Typing it is the friction.</p>
+      </div>
+      <div class="moment r" style="--d:240">
+        <span class="n">moment 02 — eyes busy</span>
+        <h3>Mid-task output</h3>
+        <p>You don't want to read a wall of output while you're working.</p>
+        <pre class="wall">▸ 128 passed · 3 skipped
+▸ lint: 0 errors · 0 warnings
+▸ typecheck: clean
+▸ bundle: 4,812 modules · 2.4 MB gzip
+▸ tests: 46/46 green
+▸ coverage: 94% · branch 91%</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · the fix -->
+  <section class="slide" data-index="3" aria-hidden="true">
+    <p class="eyebrow r" style="--d:0">The fix</p>
+    <h2 class="r" style="--d:60">DICTATE. LISTEN.<br>KEEP MOVING.</h2>
+    <div class="flow">
+      <div class="leg r" style="--d:160">
+        <span class="dir"><b>IN</b> · dictation</span>
+        <div class="meter slim" aria-hidden="true"></div>
+        <p class="line">"Run the tests when the build finishes."</p>
+        <div class="card">
+          <span class="play">▶</span>
+          <span class="txt">voice-note · you spoke · 3.2s</span>
+        </div>
+        <p class="sub" style="font-size:17px">…becomes a <b>user turn</b>, with an audio card you can replay.</p>
+      </div>
+      <div class="leg r" style="--d:240">
+        <span class="dir"><b>OUT</b> · narration</span>
+        <div class="meter slim" aria-hidden="true"></div>
+        <p class="line">"Build finished, 0 failures."</p>
+        <div class="card">
+          <span class="play">▶</span>
+          <span class="txt">voice-note · agent spoke · 2.1s</span>
+        </div>
+        <p class="sub" style="font-size:17px">…synthesized and <b>spoken aloud</b> while you keep working.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · local-first -->
+  <section class="slide" data-index="4" aria-hidden="true">
+    <p class="eyebrow r" style="--d:0">Local-first</p>
+    <h2 class="r" style="--d:60">AUDIO IS JUST FILES.<br>YOU OWN THEM.</h2>
+    <div class="local-grid">
+      <div class="files r" style="--d:150">
+        <p class="path">~/.dsh/voice/</p>
+        <div class="row"><span>voice-in-abc.m4a</span><span class="sz">72 KB</span></div>
+        <div class="row"><span>voice-speak-1.m4a</span><span class="sz">48 KB</span></div>
+        <div class="row"><span>voice-in-def.m4a</span><span class="sz">61 KB</span></div>
+        <div class="row"><span>…</span><span class="sz"></span></div>
+      </div>
+      <div class="facts">
+        <div class="fact r" style="--d:200"><span class="mark">✓</span><span class="t">Log holds <code>refs + transcripts</code> only — never raw bytes.</span></div>
+        <div class="fact r" style="--d:270"><span class="mark">✓</span><span class="t"><code>rm</code> any file anytime — the card degrades gracefully.</span></div>
+        <div class="fact r" style="--d:340"><span class="mark">✓</span><span class="t">Nothing auto-runs. Cloud only if <code>you</code> configure it.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 · details / commands -->
+  <section class="slide" data-index="5" aria-hidden="true">
+    <p class="eyebrow r" style="--d:0">Control</p>
+    <h2 class="r" style="--d:60">NARRATION,<br>WHEN YOU WANT IT.</h2>
+    <div class="term r" style="--d:150">
+      <span class="rec" aria-hidden="true"></span><span class="cmd">/voice on</span>
+      <span class="desc">flip <b>readReplies</b> on live — the assistant reads its answers aloud</span>
+    </div>
+    <div class="term r" style="--d:230">
+      <span class="cmd">speak(</span>
+      <span class="desc">"build finished, 0 failures"<b>)</b> — walk-away status on long headless runs</span>
+    </div>
+    <div class="chips">
+      <span class="chip offline">whisper-local</span>
+      <span class="chip offline">macos</span>
+      <span class="chip offline">say</span>
+      <span class="chip offline">piper</span>
+      <span class="chip cloud">openai · edge-tts — only when you say so</span>
+    </div>
+  </section>
+
+  <!-- 7 · install -->
+  <section class="slide" data-index="6" aria-hidden="true">
+    <p class="eyebrow r" style="--d:0">Install</p>
+    <h2 class="r" style="--d:60">VOICE NOTES IN.<br>SPOKEN ANSWERS OUT.</h2>
+    <div class="install r" style="--d:170">
+      <div class="meter slim" aria-hidden="true"></div>
+      <p class="line"><span class="prompt">$ </span>dsh plugin --profile web add <span class="pkg">@dsh-voice/bundle</span></p>
+    </div>
+    <p class="sub r" style="--d:280">One command. Local-first by default. Hands-free DSH.</p>
+  </section>
+
+  <!-- chrome -->
+  <footer class="chrome">
+    <span class="wordmark"><span class="dotmark" aria-hidden="true"></span>dsh·voice</span>
+    <div class="dots" id="dots" role="tablist" aria-label="Slides"></div>
+    <span class="counter"><b id="cur">01</b> / <span id="total">07</span></span>
+  </footer>
+  <div class="hint" id="hint">space / → to advance · f for fullscreen</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var stage = document.getElementById('stage');
+  var slides = Array.prototype.slice.call(stage.querySelectorAll('.slide'));
+  var dotsWrap = document.getElementById('dots');
+  var curEl = document.getElementById('cur');
+  var totalEl = document.getElementById('total');
+  var hint = document.getElementById('hint');
+  var index = 0;
+  var DOTS = [];
+
+  totalEl.textContent = String(slides.length).padStart(2, '0');
+
+  // Build every voice meter's bars (24 per meter).
+  stage.querySelectorAll('.meter').forEach(function (meter) {
+    var n = meter.classList.contains('slim') ? 22 : 26;
+    for (var i = 0; i < n; i++) {
+      var bar = document.createElement('span');
+      bar.className = 'bar';
+      var peak = 0.35 + ((i * 37) % 55) / 100;   // pseudo-random peak per bar
+      bar.style.setProperty('--peak', peak.toFixed(2));
+      bar.style.setProperty('--i', String(i));
+      meter.appendChild(bar);
+    }
+  });
+
+  // Build the dot navigation.
+  slides.forEach(function (_, i) {
+    var dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className = 'dot';
+    dot.setAttribute('role', 'tab');
+    dot.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+    dot.addEventListener('click', function (event) {
+      event.stopPropagation();
+      go(i);
+    });
+    dotsWrap.appendChild(dot);
+    DOTS.push(dot);
+  });
+
+  function go(next) {
+    if (next === index || next < 0 || next >= slides.length) return;
+    slides[index].classList.remove('active');
+    slides[index].setAttribute('aria-hidden', 'true');
+    DOTS[index].setAttribute('aria-current', 'false');
+    index = next;
+    slides[index].classList.add('active');
+    slides[index].setAttribute('aria-hidden', 'false');
+    DOTS[index].setAttribute('aria-current', 'true');
+    curEl.textContent = String(index + 1).padStart(2, '0');
+    hint.classList.add('gone');
+  }
+
+  function next() { go(index + 1); }
+  function prev() { go(index - 1); }
+
+  // Keyboard: → / space / PageDown / Enter advance; ← / PageUp go back;
+  // Home / End jump; F toggles fullscreen.
+  document.addEventListener('keydown', function (event) {
+    var k = event.key;
+    if (k === 'ArrowRight' || k === ' ' || k === 'PageDown' || k === 'Enter') { event.preventDefault(); next(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp') { event.preventDefault(); prev(); }
+    else if (k === 'Home') { event.preventDefault(); go(0); }
+    else if (k === 'End') { event.preventDefault(); go(slides.length - 1); }
+    else if (k === 'f' || k === 'F') {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+    }
+  });
+
+  // Click: left quarter goes back, rest advances (dots stop propagation).
+  stage.addEventListener('click', function (event) {
+    if (event.target.closest('.dot')) return;
+    var rect = stage.getBoundingClientRect();
+    var x = event.clientX - rect.left;
+    if (x < rect.width * 0.25) prev();
+    else next();
+  });
+
+  // Fit the fixed 1280x720 stage into the window.
+  function fit() {
+    var scale = Math.min(window.innerWidth / 1280, window.innerHeight / 720) * 0.97;
+    stage.style.transform = 'scale(' + scale + ')';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  // Start on slide 1 (or the slide named by the URL hash, e.g. #5).
+  var start = 0;
+  var hash = parseInt(window.location.hash.slice(1), 10);
+  if (Number.isFinite(hash) && hash >= 1 && hash <= slides.length) start = hash - 1;
+  go(start);
+  slides[start].classList.add('active');
+  slides[start].setAttribute('aria-hidden', 'false');
+  DOTS[start].setAttribute('aria-current', 'true');
+  curEl.textContent = String(start + 1).padStart(2, '0');
+})();
+</script>
+</body>
+</html>

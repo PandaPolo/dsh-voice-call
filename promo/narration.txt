@@ -1,0 +1,39 @@
+dsh-voice — promo narration (~70 seconds, 7 slides)
+====================================================
+Read this aloud while screen-recording. Each block starts on its slide; hold
+each slide ~9-10 seconds. Advance with the space bar or right arrow. Total
+run time ≈ 70 seconds.
+
+[Slide 1 — hero]
+Meet dsh-voice: voice notes in, spoken answers out. Dictate what you need,
+and the agent reads its replies aloud. A hands-free terminal for DSH.
+
+[Slide 2 — what it is]
+Two tools. transcribe turns spoken audio into a real user message — the
+agent answers it like anything you typed. speak reads text aloud on a
+background job, without ever blocking the turn.
+
+[Slide 3 — the pain]
+Two everyday moments a terminal handles badly. You're away from the
+keyboard and want to leave an instruction. Or you're mid-task and don't
+want to read a wall of output.
+
+[Slide 4 — the fix]
+So dsh-voice fixes both. Dictate a note — it becomes a user turn, with an
+audio card you can replay. Ask for the reply aloud — it is synthesized and
+spoken while you keep working.
+
+[Slide 5 — local-first]
+Everything stays local. Audio is plain files under tilde-slash-dsh-slash
+voice — inspect them, delete them. The session log holds only refs and
+transcripts. Nothing auto-runs, and audio only leaves your machine if you
+configure a cloud backend.
+
+[Slide 6 — details]
+Narration doubles as walk-away status on long builds. Slash-voice on flips
+spoken replies on live. Offline backends first: whisper, macOS speech, say,
+piper.
+
+[Slide 7 — install]
+One command to install: dsh plugin, profile web, add, at-dsh-voice-slash-
+bundle. Voice notes in. Spoken answers out.
