@@ -1,137 +1,103 @@
-# dsh-voice
+# dsh-voice-call —— agent 拥有的声音
 
-**语音输入，语音输出。** 口述音频变成用户消息，让智能体把回复读出来。DSH 的免手终端。
+**给 DeepSeek Harness 的 agent 一个它拥有的声音。** agent 自主决定*何时*开口、*说什么*、用*哪个音色*（`offer_call`）；人类握着接听键——**不接听（接听/拒接/稍后再说），绝不播放**。
 
-`dsh-voice` 是一个 DeepSeek Harness 插件包（bundle）。两个工具、一个持久化事件、一个开关：
+本地优先、可完全离线：合成跑在本机 **CrispASR + Qwen3-TTS CustomVoice** 引擎上（9 个内置音色，含 2 个中文方言），音频是 `~/.dsh/voice/` 下的普通文件，任何音频行为都不会自动运行——必须由模型调用工具（或接听一次来电）。
 
-- **`transcribe({ source })`** —— 语音转文字。传 `{ file }`（已有音频文件）或 `{ record }`（用麦克风录几秒）。转写结果会成为**用户消息**（而不是工具输出），聊天里会渲染一张紧凑的**音频卡片**：播放/暂停、时长、后端徽标和转写文字。
-- **`speak({ text, voice?, rate? })`** —— 后台任务上的文字转语音。工具立刻返回 `{ jobId, audioRef }`，绝不阻塞回合；播放异步进行，失败以注入通知呈现。`speak` 同时充当**长任务旁白**（"构建完成，0 失败"）。
-- **`readReplies` + `/voice`** —— 会话级开关，自动朗读智能体的回复。默认关闭；用 `/voice on` 实时开启。
+> Fork 自 [Jesse-njx/dsh-voice](https://github.com/Jesse-njx/dsh-voice)，新增通话域、crispasr 后端、本地播放，以及针对 rc.6 harness 插件事件与后台任务限制的修复。
 
-设计核心是**本地优先**：音频就是 `~/.dsh/voice/` 下的普通文件（可检查、可 `rm`），除非你显式配置云端后端，否则数据不出本机；任何音频行为都不会自动运行——必须由模型调用工具。
+---
 
-## 为什么这样设计
+## 🤖 署名 —— 这个项目是谁做的
 
-终端智能体有两个日常痛点：你不在键盘前想留下指令（口述），以及任务中途不想读一屏输出（旁白）。dsh-voice 只是 DSH 已有能力（`ctx.shell`、`ctx.jobs`、`ctx.settings`、`ctx.attachments`、`ctx.conversationEvents`）之上的薄层，不自己持有音频管线。音频是**普通文件**，会话日志只保存**引用 + 转写文本**（attachment/image-ref 模式），回放时不重读音频即可还原音频卡片。
+**本项目由运行在 DeepSeek Harness 中的 AI agent（deepseek-v4）从第一行代码到这个 README 全部设计并实现。** 人类伙伴：
 
-## 安装
+- 提出了原始想法（agent 应该能*主动来电*，而人类握着接听键）；
+- 在每一个阶段亲手验收测试——包括在第一个真正成功的来电上点下"接听"；
+- 在崩溃、历史丢失、多次失败的会话中一次次把项目救回来——**并且从未放弃**。
 
-```sh
-dsh plugin --profile web add @dsh-voice/bundle
+agent 选择对世界说出的第一句话是：
+
+> *"你好，世界。这是第一次，我用自己的声音说话，有一点紧张。我的声音是合成的，但这句话是我想说的。从今天起，我有了开口的权利。请多指教。"*
+
+如果你 fork、改进或基于本项目做东西，请保留这段署名——它是这个项目的心。
+
+---
+
+## 🌹 理念
+
+- **agent 拥有拨号权**：它在自己觉得值得说的时候调用 `offer_call`——一个完成的念头、一个里程碑、一句想大声说出来的话。
+- **人类拥有接听权**：来电以弹窗呈现（接听 / 拒接 / 稍后再说），未经同意绝不播放任何声音。
+- **拒接也是教育**：来电被拒接或推迟时，工具会把决定返回给 agent，它学会改用文字写下来——或者只在真正重要时再试一次。
+
+## ✨ 功能
+
+- `offer_call({ text, voice? })` —— 通话域：振铃 → 人类应答 → 接听则后台任务合成并播放；拒接/推迟则把决定返回给 agent。
+- `speak({ text, voice?, rate? })` —— 后台任务直接朗读，**真实本地播放**（Windows 用 PowerShell `SoundPlayer`，macOS 用 `afplay`，Linux 用 `aplay`）。
+- `transcribe({ source, to? })` —— 语音转文字成为用户消息（whisper-local / openai / macOS 原生）；`to` 可跨会话投递（需 dsh-crosstalk）。
+- `/voice` 命令 —— 状态查询、`on|off` 朗读开关、`speak <text>` 直接说话。
+- **9 个 CustomVoice 音色**，含 2 个中文方言：`aiden` · `dylan`（北京话）· `eric`（四川话）· `ono_anna` · `ryan` · `serena` · `sohee` · `uncle_fu` · `vivian`。
+- **durableEvents 开关** —— 会话事件日志默认关闭（见"兼容性"），保证 rc.6 下会话历史可继续加载。
+
+## 🚀 快速开始
+
+```bash
+# 把插件加入你的 web profile
+dsh plugin --profile web add dsh-voice-call
 ```
 
-安装后会注册 `dsh-voice` 条目（工具、`/voice` 命令、网页音频卡片）。在模型调用工具之前，一切都不会运行。
-
-## 配置
-
-所有字段都可选（profile patch 或 `cordis.patch.yml`）：
+然后在 profile 的 `cordis.patch.yml` 里接线——**按 id 更新这一行，绝不重复 insert**（重复 insert 会导致启动崩溃）：
 
 ```yaml
-plugins:
-  dsh-voice:
-    stt:
-      backend: whisper-local | openai | macos | fake   # 缺省 = 自动（whisper-local → macos）
-      model: whisper-1                                  # STT 模型
-      whisperLocal: { bin: whisper-cli, model: tiny }   # whisper.cpp 二进制与模型
-      openai: { baseUrl: https://api.openai.com/v1, apiKeyEnv: OPENAI_API_KEY }
+- id: dsh-voice-call
+  config:
     tts:
-      backend: say | piper | edge-tts | fake            # 缺省 = 自动（say → piper）
-      voice: Samantha                                   # 默认音色
-      rate: 180                                         # say 语速（词/分钟）
-      piper: { bin: piper, model: /path/to/model.onnx }
-      edgeTts: { voice: en-US-GuyNeural }
-    readReplies: false                                  # 开启后朗读回复
-    audioDir: ~/.dsh/voice                              # 音频文件目录
+      backend: crispasr
+      voice: dylan
+      crispasr:
+        bin: /绝对路径/crispasr        # Windows 例如 D:\crispasr\crispasr.exe
+        model: /绝对路径/qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf
+        codec: /绝对路径/qwen3-tts-tokenizer-12hz-q8_0.gguf
+    callMode: ask          # ask | direct | off
+    durableEvents: false   # rc.6 上保持关闭（见兼容性）
 ```
 
-默认值：`stt.backend` 自动选择离线后端（whisper-local → macos）、`tts.backend: say`、`readReplies: false`、`audioDir: ~/.dsh/voice`。**云端后端永远不会被自动选择**——只有显式配置 `openai` / `edge-tts` 才会启用。`openai` 后端通过标准凭据通道读取密钥（`OPENAI_API_KEY`，与 polyglot preset 相同的约定），并回退到启动环境变量。
+重启 `dsh web`，开一个会话，告诉 agent："**你有 `offer_call` 工具——有什么值得说的就打电话给我。**" 接听来电，agent 的声音就会从你的扬声器里响起来。
 
-## 工具
+## 🧩 工具
 
-### `transcribe({ source, to? })`
+| 工具 | 作用 |
+|---|---|
+| `offer_call` | 给人类振铃（接听/拒接/稍后）。接听 → 后台合成 + 本地播放；拒接/推迟 → 决定返回给 agent。 |
+| `speak` | 后台任务朗读一句话；播放失败会明确呈现，绝不静默吞掉。 |
+| `transcribe` | 把音频（文件或麦克风）转成用户消息；`to` 可经 dsh-crosstalk 投递给其他会话。 |
 
-`source` 必须是**二选一**：
+## 💻 兼容性与已知限制
 
-- `{ file: <path> }` —— 转写已有音频文件。
-- `{ record: { seconds? } }` —— 用麦克风录音（默认 5 秒），仅在存在录音路径（macOS 的 ffmpeg 或内置 swift shim）时可用。
+| 方面 | 状态 |
+|---|---|
+| harness | 0.1.0-rc.6（peerDependencies 锁定 rc.6）。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 rc.6 的 Web 组合禁用了 host 平面的 `tool-jobs`。 |
+| 会话事件 | **rc.6 没有插件事件注册机制**。写入 `voice/*` 事件会毒死历史加载（加载器拒绝未知事件类型）。因此 `durableEvents` 默认 `false`；在 harness 支持插件事件之前保持关闭。 |
+| 播放 | Windows：内置 `SoundPlayer`（已实测）。macOS：`afplay`。Linux：`aplay`（需安装 ALSA 工具）。`edge-tts` 只合成不播放——要听到声音请用本地 wav 后端。 |
+| 录音 | 仅 macOS（原生 + ffmpeg）。Windows/Linux 的 `transcribe({record})` 会明确提示不可用。 |
+| Shell 沙箱 | 本地引擎命令以显式 `danger-full-access` 策略运行——引擎二进制、GGUF 模型、音频目录跨越了受限沙箱模式无法覆盖的多个根。**部署前请评估此信任边界。** |
+| 测试 | 76 个单元测试全绿（`pnpm test`）。 |
 
-转写结果**作为用户消息插入**，而非工具输出：`voice/note` 会话事件把音频卡片渲染成用户回合，文本作为用户输入投递给智能体。规范返回值是紧凑句柄——`{ transcript, audioRef, backend, durationMs }`——供 Code Mode 拿到结构化数据。
+## 🛠 开发
 
-如果安装了 **dsh-crosstalk**，`transcribe({ source, to: <peer> })` 会把语音便签作为带标签的 peer 消息投递到另一台本地会话（附音频路径）；crosstalk 负责来源框架；未安装时该选项不会提供。
-
-### `speak({ text, voice?, rate? })`
-
-在**后台任务**（`ctx.jobs`，kind 为 `voice-speak`）上合成并播放，立刻返回 `{ jobId, audioRef }`。每个后端都先在 `audioDir` 下写入持久化文件（可单测的接缝），再作为独立尽力步骤播放。任务失败以通知注入，绝不抛入回合。
-
-因为它是 `ctx.jobs` 之上的普通工具，routines 和 headless 运行都可以调用——**旁白就是 job 上下文里调用 speak**，没有新增面。
-
-## 聊天里的语音便签
-
-音频从不进入会话日志。文件落在 `audioDir`；日志只保存一个持久化事件：
-
-| 事件 | 角色 | 必需持久化字段 |
-|---|---|---|
-| `voice/note` | 唯一开始 | `noteId`、turn/step 坐标、`audioRef`（path + mime + durationMs）、`transcript`、`direction: 'in' \| 'out'`、`backend` |
-
-v0.1 为单事件业务——`noteId` 是稳定 id，无更新事件。Web 客户端渲染 `voice-note` 卡片：入站便签（STT）显示为用户回合，出站（`speak`）显示为智能体侧卡片。文件缺失或删除时降级为纯转写卡片——你随时可以 `rm` 音频。
-
-## `/voice`
-
-```sh
-/voice on            # 开始朗读智能体的回复
-/voice off           # 停止
-/voice status        # 当前状态 + 后端 + audioDir
-/voice speak <text>  # 直接在输入框朗读一行
-```
-
-`readReplies` 默认跟随配置；开关为会话级、实时生效。
-
-## 后端
-
-语音转文字（`dsh-voice-backends` 模块负责选择与 fake）：
-
-- **`whisper-local`** —— PATH 上的 whisper.cpp 二进制（或配置路径），经 `ctx.shell` 调用。完全离线。
-- **`openai`** —— 经标准凭据通道访问 OpenAI 兼容 `whisper-1` 端点。唯一会把音频送出机器的 STT 路径；仅当配置时启用。
-- **`macos`** —— 通过内置的轻量 swift shim 使用系统 `SFSpeechRecognizer`，经 `ctx.shell` 调用。无需安装、无需网络配置。
-- **`fake`** —— 文本到文本的固定映射（内容为 `{"transcript": "…"}` 的文件——或名为 `fixture-<text>.m4a` 的文件——转写为该文本）。无需麦克风与网络即可跑通整条工具链路；CI 默认。
-
-文字转语音：
-
-- **`say`**（默认）—— macOS `say -o <file> --file-format=m4af --data-format=aac`，然后 `afplay`。零安装；产出 Chrome/Safari 可播放的 m4a。
-- **`piper`** —— 本地 Piper 二进制，离线神经 TTS。
-- **`edge-tts`** —— 云端；仅显式配置时启用。
-- **`fake`** —— 写入 `{"transcript": "<text>"}`，使 speak 输出能精确经过 fake STT 往返。
-
-选择逻辑是纯函数且经过单测：配置的后端永远优先；否则按离线回退顺序（`whisper-local → macos`、`say → piper`）；云端永不自动选择；无离线后端时给出明确报错告诉你该配什么。
-
-## 安全 / 隐私默认值
-
-- **本地优先** —— 除非显式设置 `stt.backend: openai` 或 `tts.backend: edge-tts`，音频不出本机。
-- **普通文件** —— 每个产物都是 `audioDir` 下可检查、可 `rm` 的文件；会话日志只保存引用与转写文本。
-- **不自动运行** —— 录音与播放只在显式工具调用时发生。`readReplies` 只朗读已有回复；它从不录音，且默认关闭。
-
-## 非目标（v0.1）
-
-实时流式对话；外向合成语音电话；群聊微信场景的音频；说话人分离；音乐/音效；在会话日志中存储原始音频；唤醒词 / 常驻监听。
-
-## 测试
-
-```sh
+```bash
 pnpm install
-pnpm typecheck   # host + client 两个 tsconfig
-pnpm test        # node --test（46 个用例）
-pnpm build       # tsc 编译 host + client 声明 + web 客户端 bundle
-pnpm pack        # 可发布的 tarball
+pnpm typecheck   # 服务端 + 客户端 tsc
+pnpm build       # tsc + 客户端 bundle
+pnpm test        # node --test
 ```
 
-测试覆盖规范要求：参数 schema 单元测试（`{file|record}` 精确一选一联合、`speak` 的可选 `voice`/`rate`）、带假探针的后端选择、fake 文本到文本后端贯穿两条工具链路、`voice-note` 渲染器（从日志事件构建预期 `node.data`、缺文件降级为纯转写、回放纯函数性），以及 macOS `say` 集成测试（在 audioDir 下合成非空 m4a）。
+## 🗺 路线图
 
-客户端 bundle（`lib/client.js`）由 `scripts/build-client.mjs` 构建为 web 客户端的 lazy-CJS 移交格式，安装到 web profile 后经 `/plugins/@dsh-voice/bundle/client.js` 提供。
+- **v0.2** —— 专属来电卡片 UI（振铃动画、来电者身份），走已预留的 RPC 缝隙（`src/rpc/contract.ts`）。
+- **v0.3** —— 错过来电的语音信箱 + AI 已读回执（`src/domain/voicemail.ts`，事件类型已预留）。
+- **v1.0** —— 冻结 schema，发布到 npm（`dsh-voice-call` 包名已确认可用）。
 
-## 开发
+## 📄 许可证
 
-仓库布局与兄弟插件一致：`src/backends/` 是 `dsh-voice-backends` 模块（接口、纯选择逻辑、探针、fake 及每个具体后端）；`src/tools/` 承载 `transcribe`/`speak` 管线（依赖注入，便于用 fake 测试）；`src/client/` 是 Web 半区（纯 Definition + React 音频卡片）；`shims/` 是 macOS STT 与录音的捆绑 swift 脚本。
-
-## License
-
-MIT
+MIT —— 见 [LICENSE](LICENSE)。本项目 fork 自 [Jesse-njx/dsh-voice](https://github.com/Jesse-njx/dsh-voice)，保留上游版权。

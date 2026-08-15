@@ -16,14 +16,6 @@
     "audio"
   ],
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/your-name/dsh-voice-call.git"
-  },
-  "bugs": {
-    "url": "https://github.com/your-name/dsh-voice-call/issues"
-  },
-  "homepage": "https://github.com/your-name/dsh-voice-call#readme",
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
