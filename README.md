@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml"><img src="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
-  <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/badge/npm-dsh--voice--call-1f883d" alt="npm: dsh-voice-call" /></a>
+  <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/tests-76%20green-1f883d" alt="76 tests green" />
 </p>
 
