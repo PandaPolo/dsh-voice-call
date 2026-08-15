@@ -49,6 +49,9 @@ export const Config = z.object({
     }),
   }),
   readReplies: z.boolean().default(false),
+  // Must mirror index.ts Config: appending voice/* session events poisons
+  // history loading on harness builds without plugin-event support.
+  durableEvents: z.boolean().default(false),
   callMode: z.union(['ask', 'direct', 'off']).default('ask'),
   audioDir: z.string(),
   // Reserved for v0.3 — accepted now so configs written against v0.1 keep loading.

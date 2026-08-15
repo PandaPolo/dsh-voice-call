@@ -10,7 +10,8 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { Context } from '@deepseek-ai/cordis';
 import { AudioStore } from '../src/audio.ts';
-import { CrispasrTtsBackend, CUSTOMVOICE_SPEAKERS, buildCommandLine, playbackCommand, quoteForShell } from '../src/backends/crispasr.ts';
+import { CrispasrTtsBackend, CUSTOMVOICE_SPEAKERS, buildCommandLine, quoteForShell } from '../src/backends/crispasr.ts';
+import { playWavCommand } from '../src/backends/playback.ts';
 import { FakeSttBackend, FakeTtsBackend } from '../src/backends/fake.ts';
 import { MacosSttBackend } from '../src/backends/macos.ts';
 import { OpenAiSttBackend } from '../src/backends/openai.ts';
@@ -223,9 +224,24 @@ describe('crispasr backend', () => {
   });
 
   it('quotes the wav path inside the playback command', () => {
-    const cmd = playbackCommand("C:/voice/it's a test.wav");
+    const cmd = playWavCommand("C:/voice/it's a test.wav");
     assert.ok(cmd.includes('a test.wav'));
     assert.ok(cmd.length > 0);
+  });
+
+  it('piper plays wav through the shared local player', async () => {
+    let command = '';
+    const backend = new PiperTtsBackend(async (cmd) => {
+      command = cmd;
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }, { bin: 'piper', model: 'm.onnx' });
+    await backend.play('C:/voice/out.wav');
+    assert.match(command, /SoundPlayer|afplay|aplay/);
+  });
+
+  it('edge-tts fails loud on play (synthesizes only)', async () => {
+    const backend = new EdgeTtsBackend(async () => ({ exitCode: 0, stdout: '', stderr: '' }), { bin: 'edge-tts', voice: 'x' });
+    await assert.rejects(backend.play('C:/voice/out.mp3'), /edge-tts: playback is not implemented/);
   });
 });
 

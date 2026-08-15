@@ -114,7 +114,8 @@ function callEventOf(call: VoiceCall): VoiceCallData {
     step: 0,
     transcript: call.text,
     voice: call.voice,
-    decision: call.refusal === 'off' ? 'missed' : 'missed',
+    // A refused call settles as missed (no human decision was reached).
+    decision: 'missed',
     version: 1,
   };
 }

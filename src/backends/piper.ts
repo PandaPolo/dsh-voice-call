@@ -7,6 +7,7 @@
  * @module dsh-voice/backends/piper
  */
 import { shqFlags } from './quote.ts';
+import { runWavPlayback } from './playback.ts';
 import type { ShellRun } from './runner.ts';
 import type { SynthesizeResult, TtsBackend } from './types.ts';
 
@@ -32,7 +33,13 @@ export class PiperTtsBackend implements TtsBackend {
     return { mime: 'audio/wav' };
   }
 
-  async play(_file: string): Promise<void> {
-    // Piper writes a file only; playback is left to the caller's player.
+  async play(file: string, signal?: AbortSignal): Promise<void> {
+    // Piper writes wav; play it locally through the shared wav player so a
+    // "completed but silent" job is never reported as success.
+    try {
+      await runWavPlayback(this.run, file, signal);
+    } catch (error) {
+      throw new Error(`piper: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }

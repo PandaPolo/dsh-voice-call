@@ -33,6 +33,10 @@ export class EdgeTtsBackend implements TtsBackend {
   }
 
   async play(_file: string): Promise<void> {
-    // edge-tts writes a file only; playback is left to the caller's player.
+    // edge-tts synthesizes mp3 only, and there is no portable local mp3 player
+    // — fail loudly instead of reporting a "completed but silent" job. Users
+    // who want audible output should use a local wav backend (crispasr/piper/
+    // say) or play the artifact themselves.
+    throw new Error('edge-tts: playback is not implemented — this backend synthesizes only; use a local backend (crispasr/piper/say) for audible output');
   }
 }

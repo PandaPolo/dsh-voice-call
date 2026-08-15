@@ -18,9 +18,15 @@
  *
  * @module dsh-voice-call/backends/crispasr
  */
-import { shq } from './quote.ts';
+import { buildCommandLine, invokeForShell, quoteForShell } from './quote.ts';
+import { runWavPlayback } from './playback.ts';
 import type { ShellRun } from './runner.ts';
 import type { SynthesizeResult, TtsBackend } from './types.ts';
+
+// Re-exported for API compatibility (the platform-aware quoting helpers live
+// in `quote.ts`; the wav playback helpers live in `playback.ts`).
+export { buildCommandLine, invokeForShell, quoteForShell } from './quote.ts';
+export { playWavCommand, runWavPlayback } from './playback.ts';
 
 /** The 9 CustomVoice speakers (lowercase, as the engine expects them). */
 export const CUSTOMVOICE_SPEAKERS = [
@@ -82,26 +88,12 @@ export class CrispasrTtsBackend implements TtsBackend {
     // Local playback keeps the "answer to hear it" promise independent of the
     // web client's audio card (the card is driven by session events that rc.6
     // cannot persist safely — durableEvents stays off, so no card appears).
-    const command = playbackCommand(file);
-    const outcome = await this.run(command, { signal });
-    if (outcome.exitCode !== 0) {
-      const detail = outcome.stderr.trim() || outcome.stdout.trim();
-      throw new Error(`crispasr: playback failed (exit ${outcome.exitCode})${detail !== '' ? `: ${detail}` : ''}`);
+    try {
+      await runWavPlayback(this.run, file, signal);
+    } catch (error) {
+      throw new Error(`crispasr: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-}
-
-/**
- * Build the local playback command for a synthesized wav. Windows uses the
- * built-in PowerShell `System.Media.SoundPlayer` (WAV only, zero dependencies);
- * POSIX uses `afplay` (macOS) or `aplay` (Linux) best-effort.
- */
-export function playbackCommand(file: string): string {
-  if (process.platform === 'win32') {
-    return `(New-Object Media.SoundPlayer ${quoteForShell(file)}).PlaySync()`;
-  }
-  const player = process.platform === 'darwin' ? 'afplay' : 'aplay';
-  return invokeForShell(player, quoteForShell(file));
 }
 
 /** Build the full crispasr command line for one synthesis. */
@@ -121,31 +113,4 @@ export function crispasrCommand(
     ...(options.extraFlags ?? []),
   ];
   return buildCommandLine(tokens);
-}
-
-/** Join argv tokens into one shell command line (platform-aware quoting). */
-export function buildCommandLine(tokens: readonly string[]): string {
-  if (tokens.length === 0) return '';
-  const [program, ...args] = tokens;
-  const quoted = args.map((token) => quoteForShell(token)).join(' ');
-  return invokeForShell(program ?? '', quoted);
-}
-
-/** Quote one argument for the current platform's shell (POSIX or PowerShell). */
-export function quoteForShell(token: string | undefined): string {
-  const value = token ?? '';
-  // win32: the dsh shell layer runs PowerShell; `''` is the escape for `'`.
-  if (process.platform === 'win32') {
-    return `'${value.replaceAll("'", "''")}'`;
-  }
-  return shq(value);
-}
-
-/** Invoke a program path with pre-quoted arguments on the current shell. */
-export function invokeForShell(program: string, quotedArgs: string): string {
-  if (process.platform === 'win32') {
-    // PowerShell: `& 'path'` is the call operator for a quoted program path.
-    return `& ${quoteForShell(program)} ${quotedArgs}`.trimEnd();
-  }
-  return `${shq(program)} ${quotedArgs}`.trimEnd();
 }

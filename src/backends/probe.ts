@@ -5,7 +5,7 @@
  * @module dsh-voice/backends/probe
  */
 import { existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import type { VoiceConfig } from '../types.ts';
 import type { BackendProbes } from './selection.ts';
 
@@ -13,7 +13,9 @@ import type { BackendProbes } from './selection.ts';
 export function probeOnPath(name: string): boolean {
   const path = process.env.PATH ?? '';
   const exts = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : [''];
-  for (const dir of path.split(':').filter((entry) => entry !== '')) {
+  // `path.delimiter` is ';' on win32 and ':' on POSIX — splitting on a fixed
+  // char would silently break PATH probes on Windows.
+  for (const dir of path.split(delimiter).filter((entry) => entry !== '')) {
     for (const ext of exts) {
       try {
         const candidate = join(dir, `${name}${ext}`);

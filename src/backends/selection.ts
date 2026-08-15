@@ -56,7 +56,7 @@ export function selectSttBackend(
 
 /**
  * Select the TTS backend. A configured backend always wins; `edge-tts` is
- * never chosen automatically (cloud). Otherwise say → piper.
+ * never chosen automatically (cloud). Otherwise say → crispasr → piper.
  */
 export function selectTtsBackend(
   configured: { readonly backend?: TtsBackendId },

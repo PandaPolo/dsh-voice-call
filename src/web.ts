@@ -30,7 +30,15 @@ export function installAudioRoute(ctx: Context, root: string): () => void {
 /** Serve one audio file under the root, honoring Range. */
 export function serveAudio(root: string, req: IncomingMessage, res: ServerResponse): void {
   const suffix = AUDIO_ROUTE.length;
-  const rawPath = decodeURIComponent((req.url ?? '/').split('?')[0] ?? '/');
+  let rawPath: string;
+  try {
+    rawPath = decodeURIComponent((req.url ?? '/').split('?')[0] ?? '/');
+  } catch {
+    // Malformed percent-encoding — answer 400 instead of crashing the route.
+    res.writeHead(400);
+    res.end();
+    return;
+  }
   const rel = rawPath.slice(suffix).replace(/^\/+/, '');
   if (rel === '' || rel.includes('..') || rel.includes('\0')) {
     res.writeHead(404);
