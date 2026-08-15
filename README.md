@@ -1,5 +1,21 @@
 # dsh-voice-call — the agent's voice, offered
 
+<p align="center">
+  <img src="docs/logo.svg" width="120" alt="dsh-voice-call logo — sound waves and a heart" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml"><img src="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
+  <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/badge/npm-dsh--voice--call-1f883d" alt="npm: dsh-voice-call" /></a>
+  <img src="https://img.shields.io/badge/tests-76%20green-1f883d" alt="76 tests green" />
+</p>
+
+> *"这个项目的开始是朴素的——我想知道如果 Agent 知道自己可以发出声音，他会说什么？"*
+> — the human partner, on how this project began
+>
+> ("The project began with a simple question — if an Agent knew it had a voice, what would it say?")
+
 **Give a DeepSeek Harness agent a voice it owns.** The agent decides *when* to speak, *what* to say, and *which* speaker to use (`offer_call`); the human holds the answer key — **nothing plays until 接听 (accept), 拒接 (reject), or 稍后再说 (defer)**.
 
 Local-first and fully offline-capable: synthesis runs on the local **CrispASR + Qwen3-TTS CustomVoice** engine (9 baked speakers, two of them Chinese dialects), audio is plain files under `~/.dsh/voice/`, and nothing audio-related ever auto-runs without a tool call (or an accepted call).

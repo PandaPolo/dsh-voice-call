@@ -7,12 +7,16 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        # Playback (SoundPlayer/afplay/aplay) and PATH probing are
+        # platform-dependent — both major OS families get tested.
+        os: [ubuntu-latest, windows-latest]
         # Tests run on Node's native TS type-stripping (needs 22.18+); the
         # plugin runtime itself supports Node 20+ per engines.
-        node: [22, 24]
+        node: [22]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

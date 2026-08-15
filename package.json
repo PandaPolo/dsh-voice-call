@@ -16,6 +16,14 @@
     "audio"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PandaPolo/dsh-voice-call.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PandaPolo/dsh-voice-call/issues"
+  },
+  "homepage": "https://github.com/PandaPolo/dsh-voice-call#readme",
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
