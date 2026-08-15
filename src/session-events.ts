@@ -39,9 +39,19 @@ export function currentCoords(session: Session | undefined): { readonly turn: nu
   return { turn, step };
 }
 
-/** Append a `voice/note` event; a missing session or rejected append is logged, never thrown. */
-export function appendVoiceNote(ctx: Context, session: Session | undefined, data: VoiceNoteData): void {
-  if (session === undefined) return;
+/**
+ * Append a `voice/note` event; a missing session, a rejected append, or a
+ * disabled `durableEvents` flag is logged, never thrown.
+ *
+ * NOTE (rc.6): the harness's session loader refuses logs containing event
+ * types this build does not know, and `Session.append` cannot mark events
+ * ignorable — so appending `voice/note` on 0.1.0-rc.6 permanently poisons the
+ * session's history. Callers must pass the plugin's `durableEvents` config
+ * (default false) and keep it off until a harness with plugin-event support
+ * (or an ignorable-capable append) is present.
+ */
+export function appendVoiceNote(ctx: Context, session: Session | undefined, data: VoiceNoteData, enabled: boolean): void {
+  if (session === undefined || !enabled) return;
   try {
     session.append('voice/note', data);
   } catch (error) {

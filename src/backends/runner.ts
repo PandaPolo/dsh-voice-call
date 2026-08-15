@@ -6,6 +6,18 @@
  * @module dsh-voice/backends/runner
  */
 import type { Context } from '@deepseek-ai/cordis';
+import type { SessionId } from '@deepseek-ai/dsh-session';
+
+/**
+ * Per-call sandbox policy (structural shape of `SandboxExecutionPolicy` from
+ * `@deepseek-ai/dsh-sandbox` — kept local so the plugin needs no direct dep
+ * on that package; the shape is compatible when passed to `shell.resolve`).
+ */
+export interface VoiceSandboxPolicy {
+  readonly mode: 'read-only' | 'workspace-write' | 'danger-full-access';
+  readonly workspaceRoot: string;
+  readonly sessionId?: SessionId;
+}
 
 /** One foreground command outcome, normalized for backends. */
 export interface ShellOutcome {
@@ -15,10 +27,10 @@ export interface ShellOutcome {
 }
 
 /** Runs one shell command; resolves with the outcome (nonzero exit included). */
-export type ShellRun = (command: string, opts?: { readonly signal?: AbortSignal; readonly stdin?: string }) => Promise<ShellOutcome>;
+export type ShellRun = (command: string, opts?: { readonly signal?: AbortSignal; readonly stdin?: string; readonly sandboxPolicy?: VoiceSandboxPolicy }) => Promise<ShellOutcome>;
 
 /** Build the runner from `ctx.shell` (throws on use when the seam is absent). */
-export function makeShellRunner(ctx: Context): ShellRun {
+export function makeShellRunner(ctx: Context, policy?: VoiceSandboxPolicy): ShellRun {
   return async (command, opts) => {
     const shell = ctx.get('shell');
     if (shell === undefined) {
@@ -28,6 +40,7 @@ export function makeShellRunner(ctx: Context): ShellRun {
       command,
       ...(opts?.signal !== undefined ? { signal: opts.signal } : {}),
       ...(opts?.stdin !== undefined ? { stdin: opts.stdin } : {}),
+      ...(opts?.sandboxPolicy !== undefined ? { sandboxPolicy: opts.sandboxPolicy } : policy !== undefined ? { sandboxPolicy: policy } : {}),
     };
     const result = await shell.run(shell.resolve(request));
     return {

@@ -9,6 +9,8 @@
  *
  * @module dsh-voice/tools/speak
  */
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { JobId, JobOutcome, JobStart } from '@deepseek-ai/dsh-jobs';
@@ -24,6 +26,15 @@ import { appendVoiceNote, currentCoords, mintNoteId } from '../session-events.ts
 export interface SpeakDeps {
   readonly tts: TtsBackend;
   readonly startJob: (spec: JobStart) => JobId;
+  /**
+   * The owning agent, stamped onto the job spec. rc.6's Web composition
+   * disables `tool-jobs` on the host plane (the controller lives in the
+   * agent-preset scope), so an UNOWNED job is refused with "no job
+   * controller serves this agent" — `servesOwner(undefined)` only consults
+   * the global layer. An owned job resolves the preset scope chain, exactly
+   * like the harness's own `tool-bash`/`tool-pwsh` background tasks.
+   */
+  readonly owner?: Agent;
   /** A fresh artifact path under audioDir for one synthesis. */
   readonly audioPath: () => string;
   readonly appendNote: (data: VoiceNoteData) => void;
@@ -49,6 +60,11 @@ export function startSpeakJob(
   const controller = new AbortController();
   const work = (async (): Promise<JobOutcome> => {
     try {
+      // The audio root is created lazily on first write: synthesis targets the
+      // artifact path directly, so the parent dir must exist before the
+      // backend opens the file (a missing ~/.dsh/voice made crispasr fail
+      // with "cannot write ..." even though synthesis itself succeeded).
+      await mkdir(dirname(file), { recursive: true });
       const result = await deps.tts.synthesize({ text: input.text, ...(input.voice !== undefined ? { voice: input.voice } : {}), ...(input.rate !== undefined ? { rate: input.rate } : {}) }, file, controller.signal);
       const audioRef: AudioRef = { path: file, mime: result.mime, ...(result.durationMs !== undefined ? { durationMs: result.durationMs } : {}) };
       const coords = deps.coords();
@@ -61,8 +77,9 @@ export function startSpeakJob(
         direction: 'out',
         backend: deps.tts.id,
       });
-      // Playback is best-effort: a missing player never fails the job.
-      await deps.tts.play(file, controller.signal).catch(() => {});
+      // Playback is best-effort per platform, but a failure is SURFACED — a
+      // swallowed error left users with "job completed but silent".
+      await deps.tts.play(file, controller.signal);
       return { status: 'completed', detail: `${input.text.length} chars` };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -73,6 +90,10 @@ export function startSpeakJob(
   const spec: JobStart = {
     kind: 'voice-speak',
     label: `speak: ${truncateLabel(input.text)}`,
+    // Unowned jobs are refused in the rc.6 Web composition (host-plane
+    // tool-jobs is disabled); the owning agent makes the preset's controller
+    // serve this job. Absent in headless runs, where the host owns tool-jobs.
+    ...(deps.owner !== undefined ? { owner: deps.owner } : {}),
     run: () => ({
       cancel: (reason) => controller.abort(reason ?? 'cancelled'),
       done: work,
@@ -151,6 +172,7 @@ export function buildSpeakDeps(
   deps: {
     readonly tts: TtsBackend;
     readonly audioPath: () => string;
+    readonly durableEvents: () => boolean;
   },
   exec: { readonly agent?: Agent },
 ): SpeakDeps {
@@ -158,8 +180,9 @@ export function buildSpeakDeps(
   return {
     tts: deps.tts,
     audioPath: deps.audioPath,
+    owner: exec.agent,
     startJob: (spec) => ctx.jobs.start(spec),
-    appendNote: (data) => appendVoiceNote(ctx, session, data),
+    appendNote: (data) => appendVoiceNote(ctx, session, data, deps.durableEvents()),
     injectFailure: (message) => {
       if (exec.agent === undefined) return;
       const note: UserMessage = {

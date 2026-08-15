@@ -193,6 +193,7 @@ export function buildTranscribeDeps(
     readonly stt: SttBackend;
     readonly record: (seconds: number | undefined, signal?: AbortSignal) => Promise<RecordedMedia>;
     readonly commit: (file: string, name: string, extra?: { readonly durationMs?: number }) => Promise<AudioRef>;
+    readonly durableEvents: () => boolean;
   },
   exec: { readonly agent?: Agent },
 ): TranscribeDeps {
@@ -201,7 +202,7 @@ export function buildTranscribeDeps(
     stt: deps.stt,
     record: deps.record,
     commit: deps.commit,
-    appendNote: (data) => appendVoiceNote(ctx, session, data),
+    appendNote: (data) => appendVoiceNote(ctx, session, data, deps.durableEvents()),
     deliverToPeer: (to, transcript, audioRef) => deliverToPeer(ctx, to, transcript, audioRef),
     deliverUserMessage: (transcript, noteId) => {
       if (exec.agent === undefined) return;

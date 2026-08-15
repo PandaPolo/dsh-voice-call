@@ -59,6 +59,13 @@ export function probeMic(): boolean {
   return probeOnPath('ffmpeg') || probeOnPath('swift');
 }
 
+/** Whether the local CrispASR engine is fully configured: bin + talker + codec. */
+export function probeCrispasr(config: VoiceConfig): boolean {
+  const engine = config.tts.crispasr;
+  if (engine === undefined) return false;
+  return probeFile(engine.bin) && probeFile(engine.model) && probeFile(engine.codec);
+}
+
 /** Probe every backend for the current machine + config. */
 export function probeBackends(config: VoiceConfig): BackendProbes {
   return {
@@ -67,6 +74,7 @@ export function probeBackends(config: VoiceConfig): BackendProbes {
     macos: probeSwift(),
     piper: probeFile(config.tts.piper?.bin) || probeOnPath('piper'),
     edgeTts: probeOnPath('edge-tts'),
+    crispasr: probeCrispasr(config),
     mic: probeMic(),
   };
 }

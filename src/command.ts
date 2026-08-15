@@ -22,6 +22,8 @@ export interface VoiceCommandDeps {
   readonly speakDeps: (session: Session) => SpeakDeps;
   /** Current config display (audioDir, backends). */
   readonly configLine: () => string;
+  /** The current call mode (ask | direct | off). */
+  readonly callMode: () => string;
 }
 
 /** Register the `/voice` command on `ctx.commands`. */
@@ -47,8 +49,9 @@ async function voiceCommand(invocation: CommandInvocation, deps: VoiceCommandDep
     return {
       kind: 'success',
       text: [
-        `dsh-voice readReplies: ${state}`,
+        `dsh-voice-call readReplies: ${state}`,
         deps.statusLine(),
+        `callMode: ${deps.callMode()}`,
         deps.configLine(),
         'Use /voice on|off to flip narration, /voice speak <text> to speak a line.',
       ].join('\n'),

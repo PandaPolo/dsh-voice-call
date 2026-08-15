@@ -15,6 +15,7 @@ function probes(partial: Partial<BackendProbes>): BackendProbes {
     macos: false,
     piper: false,
     edgeTts: false,
+    crispasr: false,
     mic: false,
     ...partial,
   };
@@ -55,12 +56,14 @@ describe('STT backend selection', () => {
 });
 
 describe('TTS backend selection', () => {
-  it('defaults to say when available, else piper', () => {
+  it('defaults to say when available, else crispasr, else piper', () => {
     const say = selectTtsBackend({}, probes({ say: true })) as { kind: 'ok'; id: string };
     assert.equal(say.id, 'say');
+    const crispasr = selectTtsBackend({}, probes({ crispasr: true })) as { kind: 'ok'; id: string };
+    assert.equal(crispasr.id, 'crispasr');
     const piper = selectTtsBackend({}, probes({ piper: true })) as { kind: 'ok'; id: string };
     assert.equal(piper.id, 'piper');
-    assert.deepEqual(AUTO_TTS_ORDER, ['say', 'piper']);
+    assert.deepEqual(AUTO_TTS_ORDER, ['say', 'crispasr', 'piper']);
   });
 
   it('never auto-selects edge-tts (cloud)', () => {
@@ -71,6 +74,11 @@ describe('TTS backend selection', () => {
   it('picks edge-tts only when explicitly configured', () => {
     const pinned = selectTtsBackend({ backend: 'edge-tts' }, probes({})) as { kind: 'ok'; id: string };
     assert.equal(pinned.id, 'edge-tts');
+  });
+
+  it('picks crispasr only when explicitly configured (even without probes)', () => {
+    const pinned = selectTtsBackend({ backend: 'crispasr' }, probes({})) as { kind: 'ok'; id: string };
+    assert.equal(pinned.id, 'crispasr');
   });
 
   it('reports a reason when no local TTS exists', () => {

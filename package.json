@@ -1,30 +1,29 @@
 {
-  "name": "@dsh-voice/bundle",
+  "name": "dsh-voice-call",
   "version": "0.1.0",
-  "description": "dsh-voice — voice notes in, spoken answers out: dictate audio that becomes user messages (transcribe), have the agent read replies aloud (speak), and leave walk-away narration on long headless runs. Local-first, plain audio files under ~/.dsh/voice/",
+  "description": "dsh-voice-call — give the agent a voice it owns: the agent decides when to speak (offer_call), the human holds the answer key (接听/拒接/稍后). Local-first TTS via CrispASR + Qwen3-TTS CustomVoice, plain audio files under ~/.dsh/voice/. Fork of dsh-voice with a call-domain, crispasr backend, and upgrade-ready contracts (voicemail, read receipts, call-card UI).",
   "keywords": [
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
     "voice",
-    "stt",
     "tts",
-    "speech-to-text",
     "text-to-speech",
-    "whisper",
-    "macos",
-    "hands-free",
+    "call",
+    "qwen3-tts",
+    "crispasr",
+    "local-first",
     "audio"
   ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Jesse-njx/dsh-voice.git"
+    "url": "git+https://github.com/your-name/dsh-voice-call.git"
   },
   "bugs": {
-    "url": "https://github.com/Jesse-njx/dsh-voice/issues"
+    "url": "https://github.com/your-name/dsh-voice-call/issues"
   },
-  "homepage": "https://github.com/Jesse-njx/dsh-voice#readme",
+  "homepage": "https://github.com/your-name/dsh-voice-call#readme",
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
@@ -90,7 +89,9 @@
     "@deepseek-ai/dsh-session": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-settings": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-shell": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-user-questions": "^0.1.0-rc.6",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {
@@ -106,7 +107,9 @@
     "@deepseek-ai/dsh-session": "0.1.0-rc.6",
     "@deepseek-ai/dsh-settings": "0.1.0-rc.6",
     "@deepseek-ai/dsh-shell": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-system-prompt": "0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-user-questions": "0.1.0-rc.6",
     "@deepseek-ai/dsh-host-webserver": "0.1.0-rc.6",
     "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
     "@deepseek-ai/dsh-client-ui-conversation": "0.1.0-rc.6",

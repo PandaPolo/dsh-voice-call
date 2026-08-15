@@ -20,14 +20,16 @@ export interface BackendProbes {
   readonly piper: boolean;
   /** The `edge-tts` CLI is reachable. */
   readonly edgeTts: boolean;
+  /** The local crispasr binary + talker/codec GGUFs are configured. */
+  readonly crispasr: boolean;
   /** A microphone recording path exists (ffmpeg or the swift shim). */
   readonly mic: boolean;
 }
 
 /** Offline STT fallback order: whisper-local → macos (never cloud). */
 export const AUTO_STT_ORDER: readonly SttBackendId[] = ['whisper-local', 'macos'];
-/** Offline TTS fallback order: say → piper (never edge-tts). */
-export const AUTO_TTS_ORDER: readonly TtsBackendId[] = ['say', 'piper'];
+/** Offline TTS fallback order: say → crispasr → piper (never edge-tts). */
+export const AUTO_TTS_ORDER: readonly TtsBackendId[] = ['say', 'crispasr', 'piper'];
 
 /** The resolved selection: a concrete id, or `none` with a reason. */
 export type BackendSelection<Id extends string> =
@@ -76,6 +78,7 @@ function probeFor(id: SttBackendId | TtsBackendId, probes: BackendProbes): boole
     case 'macos': return probes.macos;
     case 'say': return probes.say;
     case 'piper': return probes.piper;
+    case 'crispasr': return probes.crispasr;
     default: return false;
   }
 }

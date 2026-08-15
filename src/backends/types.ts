@@ -10,7 +10,7 @@
 export type SttBackendId = 'whisper-local' | 'openai' | 'macos' | 'fake';
 
 /** Text-to-speech backend ids. */
-export type TtsBackendId = 'say' | 'piper' | 'edge-tts' | 'fake';
+export type TtsBackendId = 'say' | 'piper' | 'edge-tts' | 'fake' | 'crispasr';
 
 /** One transcription outcome. */
 export interface SttOutcome {

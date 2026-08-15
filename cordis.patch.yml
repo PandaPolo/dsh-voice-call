@@ -1,16 +1,29 @@
-# dsh-voice bundle layer: mounts the transcribe / speak tools, the voice/note
-# audio cards (web client half), the readReplies narration toggle, and the
-# /voice command. Users compose this bundle into a profile and override
-# stt / tts / readReplies / audioDir from their own profile patch.
+# dsh-voice-call bundle layer: mounts the transcribe / speak / offer_call
+# tools, the voice/note audio cards (web client half), the readReplies
+# narration toggle, the call domain (offer_call rings the human; nothing
+# plays until 接听), the voice persona system-prompt section, and the /voice
+# command.
+#
+# This bundle layer carries NEUTRAL defaults only — no machine-specific
+# paths. Users compose this bundle into a profile and override
+# stt / tts / callMode / readReplies / audioDir (and the crispasr engine
+# paths) from their own profile cordis.patch.yml, addressing this row BY ID
+# (never inserting it again — a second insert of the same id would duplicate
+# the row and break boot).
 #
 # Cloud backends (stt.backend: openai, tts.backend: edge-tts) are NEVER
-# auto-selected — only whisper-local / macos STT and say / piper TTS fall
-# back automatically, and nothing audio-related runs without a tool call.
+# auto-selected — only whisper-local / macos STT and say / crispasr / piper
+# TTS fall back automatically, and nothing audio-related runs without a tool
+# call (or an accepted call).
 - insert:
-    - id: dsh-voice
-      name: '@dsh-voice/bundle'
+    - id: dsh-voice-call
+      name: 'dsh-voice-call'
       config:
         stt: {}
         tts: {}
         readReplies: false
+        # Voice session-log events stay OFF by default: rc.6 has no plugin-event
+        # registration surface, so a voice/* event poisons history loading.
+        durableEvents: false
+        callMode: ask
         audioDir: ~/.dsh/voice

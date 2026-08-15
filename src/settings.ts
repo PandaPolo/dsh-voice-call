@@ -32,7 +32,7 @@ export const Config = z.object({
     }),
   }),
   tts: z.object({
-    backend: backendSchema(['say', 'piper', 'edge-tts', 'fake']),
+    backend: backendSchema(['say', 'piper', 'edge-tts', 'fake', 'crispasr']),
     voice: z.string(),
     rate: z.number().min(1).max(600),
     piper: z.object({
@@ -42,9 +42,18 @@ export const Config = z.object({
     edgeTts: z.object({
       voice: z.string(),
     }),
+    crispasr: z.object({
+      bin: z.string(),
+      model: z.string(),
+      codec: z.string(),
+    }),
   }),
   readReplies: z.boolean().default(false),
+  callMode: z.union(['ask', 'direct', 'off']).default('ask'),
   audioDir: z.string(),
+  // Reserved for v0.3 — accepted now so configs written against v0.1 keep loading.
+  voicemail: z.object({ enabled: z.boolean() }),
+  readReceipts: z.object({ enabled: z.boolean() }),
 });
 
 /**

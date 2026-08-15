@@ -1,9 +1,10 @@
 /**
- * dsh-voice — shared host types: config, audio references, and the durable
- * `voice/note` event vocabulary. Everything here is JSON-serializable so the
- * event data can cross the session-log boundary and the wire unchanged.
+ * dsh-voice-call — shared host types: config, audio references, the durable
+ * `voice/note` event vocabulary, and the `voice/call` call-domain vocabulary.
+ * Everything here is JSON-serializable so the event data can cross the
+ * session-log boundary and the wire unchanged.
  *
- * @module dsh-voice/types
+ * @module dsh-voice-call/types
  */
 import type { SttBackendId, TtsBackendId } from './backends/types.ts';
 
@@ -19,6 +20,31 @@ export interface AudioRef {
   /** Playback duration in milliseconds, when the backend reported one. */
   readonly durationMs?: number;
 }
+
+/**
+ * The CrispASR engine configuration — the local Qwen3-TTS CustomVoice
+ * pipeline. `bin` is the crispasr executable, `model` the talker GGUF and
+ * `codec` the Qwen3-TTS tokenizer/vocoder GGUF.
+ */
+export interface CrispasrEngineConfig {
+  /** Path to `crispasr.exe` (or `crispasr` on POSIX). */
+  readonly bin?: string;
+  /** Path to the talker GGUF, e.g. `qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf`. */
+  readonly model?: string;
+  /** Path to the codec/tokenizer GGUF, e.g. `qwen3-tts-tokenizer-12hz-q8_0.gguf`. */
+  readonly codec?: string;
+}
+
+/**
+ * Ring/answer behaviour for `offer_call`. `ask` routes the call through the
+ * human confirmation channel (the light-weight v0.1 answer: the built-in
+ * user-questions prompt). `direct` accepts immediately (no ring) for
+ * already-confirmed narration. `off` refuses calls outright.
+ *
+ * FUTURE (v0.2+): the ring may carry a timeout, a caller identity, and a
+ * custom call-card UI; those fields belong here when they land.
+ */
+export type CallMode = 'ask' | 'direct' | 'off';
 
 /** Plugin config as resolved by {@link resolveConfig} (defaults applied). */
 export interface VoiceConfig {
@@ -41,9 +67,9 @@ export interface VoiceConfig {
     };
   };
   readonly tts: {
-    /** Pinned backend; absent auto-selects (say → piper). */
+    /** Pinned backend; absent auto-selects (say → crispasr → piper). */
     readonly backend?: TtsBackendId;
-    /** Default voice passed to the backend (say voice, edge-tts voice). */
+    /** Default voice passed to the backend (crispasr CustomVoice speaker, say voice, edge-tts voice). */
     readonly voice?: string;
     /** Default speaking rate (say words-per-minute). */
     readonly rate?: number;
@@ -55,11 +81,42 @@ export interface VoiceConfig {
     readonly edgeTts?: {
       readonly voice?: string;
     };
+    /** The local CrispASR + Qwen3-TTS CustomVoice engine. */
+    readonly crispasr?: CrispasrEngineConfig;
   };
   /** When true, the assistant's reply text is spoken aloud automatically. */
   readonly readReplies: boolean;
+  /**
+   * When true, `voice/call` and `voice/note` events are appended to the
+   * session log (audio cards + call records on replay). Default false:
+   * DSH 0.1.0-rc.6 has no plugin-event registration surface, and its session
+   * loader REFUSES logs containing event types it does not know — an appended
+   * voice event would make the session's history permanently unloadable.
+   * Set to true only on a harness build that knows these types (or after a
+   * supported registration surface exists).
+   */
+  readonly durableEvents: boolean;
+  /**
+   * How `offer_call` rings the human: `ask` (default), `direct`, or `off`.
+   * This is the v0.1 "answer key" — the human always holds it.
+   */
+  readonly callMode: CallMode;
   /** Audio artifact root; defaults to `~/.dsh/voice` (or `$DSH_HOME/voice`). */
   readonly audioDir: string;
+  /**
+   * FUTURE (v0.3): voicemail behaviour for missed calls. Reserved now so
+   * configs written against v0.1 keep loading unchanged.
+   */
+  readonly voicemail?: {
+    readonly enabled?: boolean;
+  };
+  /**
+   * FUTURE (v0.3): read-receipt reporting when the human plays a note.
+   * Reserved now; not implemented in v0.1.
+   */
+  readonly readReceipts?: {
+    readonly enabled?: boolean;
+  };
 }
 
 /** Raw plugin config input — every field optional, defaults applied on resolve. */
@@ -76,9 +133,14 @@ export interface VoiceConfigInput {
     readonly rate?: number;
     readonly piper?: { readonly bin?: string; readonly model?: string };
     readonly edgeTts?: { readonly voice?: string };
+    readonly crispasr?: CrispasrEngineConfig;
   };
   readonly readReplies?: boolean;
+  readonly durableEvents?: boolean;
+  readonly callMode?: CallMode;
   readonly audioDir?: string;
+  readonly voicemail?: { readonly enabled?: boolean };
+  readonly readReceipts?: { readonly enabled?: boolean };
 }
 
 /** Resolve raw config to the fully-defaulted shape the plugin consumes. */
@@ -98,13 +160,18 @@ export function resolveConfig(raw: VoiceConfigInput | undefined): VoiceConfig {
       ...(tts.rate !== undefined ? { rate: tts.rate } : {}),
       ...(tts.piper !== undefined ? { piper: tts.piper } : {}),
       ...(tts.edgeTts !== undefined ? { edgeTts: tts.edgeTts } : {}),
+      ...(tts.crispasr !== undefined ? { crispasr: tts.crispasr } : {}),
     },
     readReplies: raw?.readReplies ?? false,
+    durableEvents: raw?.durableEvents ?? false,
+    callMode: raw?.callMode ?? 'ask',
     audioDir: raw?.audioDir ?? '',
+    ...(raw?.voicemail !== undefined ? { voicemail: raw.voicemail } : {}),
+    ...(raw?.readReceipts !== undefined ? { readReceipts: raw.readReceipts } : {}),
   };
 }
 
-/** One `voice/note` event — the single durable event family of dsh-voice. */
+/** One `voice/note` event — the durable event family of dsh-voice-call. */
 export interface VoiceNoteData {
   /** Stable Definition-local business id; one start event per note. */
   readonly noteId: string;
@@ -117,8 +184,41 @@ export interface VoiceNoteData {
   readonly transcript: string;
   /** `in` = user spoke (STT); `out` = agent spoke (TTS). */
   readonly direction: 'in' | 'out';
-  /** Backend id that produced or played the audio (`say`, `fake`, …). */
+  /** Backend id that produced or played the audio (`crispasr`, `fake`, …). */
   readonly backend: string;
+}
+
+/**
+ * One `voice/call` event — the call-domain vocabulary.
+ *
+ * v0.1 emits exactly one event per call (`offered`), carrying the human's
+ * decision. The later phases of a call's life are RESERVED types so the
+ * session-log vocabulary is stable across upgrades:
+ *
+ * - `voice/call.read`        (v0.3) the human played a note — read receipt.
+ * - `voice/call.voicemail`   (v0.3) a missed call was left as a message.
+ *
+ * A client that does not know a newer event type renders it inert, and the
+ * host never breaks replay: every event is append-only JSON.
+ */
+export interface VoiceCallData {
+  /** Stable call id: `call-<timestamp>-<random>`. */
+  readonly callId: string;
+  /** Turn/step coordinates where the call entered the session. */
+  readonly turn: number;
+  readonly step: number;
+  /** What the agent wanted to say. */
+  readonly transcript: string;
+  /** Voice/speaker the call would have used. */
+  readonly voice: string;
+  /** The human's decision (v0.1: offered carries the decided value). */
+  readonly decision: 'accepted' | 'rejected' | 'later' | 'missed';
+  /** Present when accepted: the synthesized audio. */
+  readonly audioRef?: AudioRef;
+  /** Backend id that produced the audio. */
+  readonly backend?: string;
+  /** Event vocabulary version — clients render by it. */
+  readonly version: 1;
 }
 
 /** The canonical `transcribe` tool result handle. */
@@ -136,6 +236,18 @@ export interface SpeakOutput {
   readonly jobId: string;
   readonly audioRef: AudioRef;
   readonly backend: string;
+}
+
+/** The canonical `offer_call` tool result handle. */
+export interface OfferCallOutput {
+  /** `accepted` — the human answered; audio was synthesized (job running). */
+  readonly status: 'accepted' | 'rejected' | 'later' | 'missed' | 'off' | 'unavailable';
+  readonly callId: string;
+  readonly jobId?: string;
+  readonly audioRef?: AudioRef;
+  readonly backend?: string;
+  /** Human-readable reason for `unavailable` / `off`. */
+  readonly reason?: string;
 }
 
 /** The canonical `record` media result produced before transcription. */

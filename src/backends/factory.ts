@@ -9,6 +9,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { RecordedMedia, VoiceConfig } from '../types.ts';
+import { CrispasrTtsBackend } from './crispasr.ts';
 import { EdgeTtsBackend } from './edge-tts.ts';
 import { FakeSttBackend, FakeTtsBackend } from './fake.ts';
 import { MacosSttBackend, recordWithMacos } from './macos.ts';
@@ -16,7 +17,7 @@ import { OpenAiSttBackend } from './openai.ts';
 import { PiperTtsBackend } from './piper.ts';
 import { probeBackends } from './probe.ts';
 import type { BackendProbes } from './selection.ts';
-import { makeShellRunner, type ShellRun } from './runner.ts';
+import { makeShellRunner, type ShellRun, type VoiceSandboxPolicy } from './runner.ts';
 import { SayTtsBackend } from './say.ts';
 import { selectSttBackend, selectTtsBackend } from './selection.ts';
 import type { SttBackend, TtsBackend } from './types.ts';
@@ -30,11 +31,17 @@ export interface BackendDeps {
   readonly run?: ShellRun;
   /** Availability probes override (unit tests); defaults to live probes. */
   readonly probes?: BackendProbes;
+  /**
+   * Per-call sandbox policy stamped onto every shell request (e.g. a fixed
+   * danger-full-access policy for the local TTS engine — its binaries, models,
+   * and audio dir span multiple roots that no confined mode covers).
+   */
+  readonly policy?: VoiceSandboxPolicy;
 }
 
 /** Build the configured STT backend, throwing the selection reason on none. */
 export function createSttBackend(deps: BackendDeps): SttBackend {
-  const run = deps.run ?? makeShellRunner(deps.ctx);
+  const run = deps.run ?? makeShellRunner(deps.ctx, deps.policy);
   const probes = deps.probes ?? probeBackends(deps.config);
   const selected = selectSttBackend(deps.config.stt, probes);
   if (selected.kind === 'none') throw new Error(`dsh-voice: ${selected.reason}`);
@@ -59,7 +66,7 @@ export function createSttBackend(deps: BackendDeps): SttBackend {
 
 /** Build the configured TTS backend, throwing the selection reason on none. */
 export function createTtsBackend(deps: BackendDeps): TtsBackend {
-  const run = deps.run ?? makeShellRunner(deps.ctx);
+  const run = deps.run ?? makeShellRunner(deps.ctx, deps.policy);
   const probes = deps.probes ?? probeBackends(deps.config);
   const selected = selectTtsBackend(deps.config.tts, probes);
   if (selected.kind === 'none') throw new Error(`dsh-voice: ${selected.reason}`);
@@ -78,6 +85,14 @@ export function createTtsBackend(deps: BackendDeps): TtsBackend {
         bin: 'edge-tts',
         voice: deps.config.tts.edgeTts?.voice ?? deps.config.tts.voice ?? 'en-US-GuyNeural',
       });
+    case 'crispasr': {
+      const engine = deps.config.tts.crispasr ?? {};
+      return new CrispasrTtsBackend(run, {
+        bin: engine.bin ?? 'crispasr',
+        model: engine.model ?? '',
+        codec: engine.codec ?? '',
+      });
+    }
   }
 }
 
@@ -86,7 +101,7 @@ export function createTtsBackend(deps: BackendDeps): TtsBackend {
  * availability: the caller checks `probes.mic` before offering recording.
  */
 export function createRecordFn(deps: BackendDeps): (seconds: number | undefined, signal?: AbortSignal) => Promise<RecordedMedia> {
-  const run = deps.run ?? makeShellRunner(deps.ctx);
+  const run = deps.run ?? makeShellRunner(deps.ctx, deps.policy);
   return async (seconds, signal) => {
     if (!(deps.probes ?? probeBackends(deps.config)).mic) {
       throw new Error('dsh-voice: mic recording is not available in this deployment (needs ffmpeg or swift on macOS)');

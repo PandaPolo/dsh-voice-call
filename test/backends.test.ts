@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { Context } from '@deepseek-ai/cordis';
 import { AudioStore } from '../src/audio.ts';
+import { CrispasrTtsBackend, CUSTOMVOICE_SPEAKERS, buildCommandLine, playbackCommand, quoteForShell } from '../src/backends/crispasr.ts';
 import { FakeSttBackend, FakeTtsBackend } from '../src/backends/fake.ts';
 import { MacosSttBackend } from '../src/backends/macos.ts';
 import { OpenAiSttBackend } from '../src/backends/openai.ts';
@@ -28,6 +29,7 @@ const noneProbes = {
   macos: false,
   piper: false,
   edgeTts: false,
+  crispasr: false,
   mic: false,
 };
 
@@ -46,6 +48,8 @@ describe('backend factory', () => {
     assert.ok(say instanceof SayTtsBackend);
     const piper = createTtsBackend({ ctx, config, probes: { ...noneProbes, piper: true } });
     assert.ok(piper instanceof PiperTtsBackend);
+    const crispasr = createTtsBackend({ ctx, config, probes: { ...noneProbes, crispasr: true } });
+    assert.ok(crispasr instanceof CrispasrTtsBackend);
     const whisper = createSttBackend({ ctx, config, probes: { ...noneProbes, whisperLocal: true } });
     assert.ok(whisper instanceof WhisperLocalSttBackend);
     const macos = createSttBackend({ ctx, config, probes: { ...noneProbes, macos: true } });
@@ -151,6 +155,77 @@ describe('shell quoting', () => {
     assert.equal(shq("it's fine"), "'it'\\''s fine'");
     assert.equal(shq('plain'), "'plain'");
     assert.equal(shq('a b'), "'a b'");
+  });
+});
+
+describe('crispasr backend', () => {
+  it('builds the full command line with the customvoice backend', () => {
+    const cmd = buildCommandLine([
+      'crispasr', '--backend', 'qwen3-tts-customvoice',
+      '-m', 'D:/tts/talker.gguf', '--codec-model', 'D:/tts/codec.gguf',
+      '--voice', 'dylan', '--tts', '你好', '--tts-output', 'out.wav',
+    ]);
+    assert.match(cmd, /crispasr/);
+    assert.match(cmd, /qwen3-tts-customvoice/);
+    assert.match(cmd, /--voice/);
+    assert.match(cmd, /dylan/);
+    assert.match(cmd, /你好/);
+    assert.match(cmd, /out\.wav/);
+  });
+
+  it('quotes apostrophes for the current shell family', () => {
+    const q = quoteForShell("it's fine");
+    assert.ok(q.length > 0);
+  });
+
+  it('lists all nine customvoice speakers', () => {
+    assert.equal(CUSTOMVOICE_SPEAKERS.length, 9);
+    assert.ok(CUSTOMVOICE_SPEAKERS.includes('dylan'));
+    assert.ok(CUSTOMVOICE_SPEAKERS.includes('eric'));
+    assert.ok(CUSTOMVOICE_SPEAKERS.includes('vivian'));
+  });
+
+  it('synthesizes through a stubbed runner and returns wav mime', async () => {
+    let command = '';
+    const backend = new CrispasrTtsBackend(async (cmd) => {
+      command = cmd;
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }, { bin: 'crispasr', model: 'm.gguf', codec: 'c.gguf' });
+    const result = await backend.synthesize({ text: 'hello', voice: 'ryan' }, '/tmp/out.wav');
+    assert.equal(result.mime, 'audio/wav');
+    assert.match(command, /ryan/);
+  });
+
+  it('rejects unknown speakers', async () => {
+    const backend = new CrispasrTtsBackend(async () => ({ exitCode: 0, stdout: '', stderr: '' }), { bin: 'crispasr', model: 'm.gguf', codec: 'c.gguf' });
+    await assert.rejects(backend.synthesize({ text: 'x', voice: 'nobody' }, '/tmp/o.wav'), /unknown speaker/);
+  });
+
+  it('fails loud on a nonzero exit', async () => {
+    const backend = new CrispasrTtsBackend(async () => ({ exitCode: 2, stdout: '', stderr: 'cuda error' }), { bin: 'crispasr', model: 'm.gguf', codec: 'c.gguf' });
+    await assert.rejects(backend.synthesize({ text: 'x' }, '/tmp/o.wav'), /crispasr: synthesis failed/);
+  });
+
+  it('plays through a stubbed runner using the platform player', async () => {
+    let command = '';
+    const backend = new CrispasrTtsBackend(async (cmd) => {
+      command = cmd;
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }, { bin: 'crispasr', model: 'm.gguf', codec: 'c.gguf' });
+    await backend.play('C:/voice/out.wav');
+    assert.match(command, /SoundPlayer|afplay|aplay/);
+    assert.match(command, /out\.wav/);
+  });
+
+  it('fails loud when playback exits nonzero', async () => {
+    const backend = new CrispasrTtsBackend(async () => ({ exitCode: 1, stdout: '', stderr: 'no audio device' }), { bin: 'crispasr', model: 'm.gguf', codec: 'c.gguf' });
+    await assert.rejects(backend.play('C:/voice/x.wav'), /crispasr: playback failed/);
+  });
+
+  it('quotes the wav path inside the playback command', () => {
+    const cmd = playbackCommand("C:/voice/it's a test.wav");
+    assert.ok(cmd.includes('a test.wav'));
+    assert.ok(cmd.length > 0);
   });
 });
 

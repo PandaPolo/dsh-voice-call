@@ -8,6 +8,7 @@ import { describe, it } from 'node:test';
 import { validateArgs } from '@deepseek-ai/dsh-tools';
 import { transcribeParameters } from '../src/tools/transcribe.ts';
 import { speakParameters } from '../src/tools/speak.ts';
+import { offerCallParameters } from '../src/tools/offer-call.ts';
 
 describe('transcribe parameter schema', () => {
   it('accepts exactly one of {file} | {record}', () => {
@@ -44,5 +45,15 @@ describe('speak parameter schema', () => {
     assert.ok(validateArgs(speakParameters, {}).length > 0);
     assert.ok(validateArgs(speakParameters, { text: 7 }).length > 0);
     assert.ok(validateArgs(speakParameters, { text: 'hi', rate: 'fast' }).length > 0);
+  });
+});
+
+describe('offer_call parameter schema', () => {
+  it('requires text and tolerates an optional voice', () => {
+    assert.deepEqual(validateArgs(offerCallParameters, { text: 'hello there' }), []);
+    assert.deepEqual(validateArgs(offerCallParameters, { text: 'hi', voice: 'dylan' }), []);
+    assert.ok(validateArgs(offerCallParameters, {}).length > 0);
+    assert.ok(validateArgs(offerCallParameters, { text: 7 }).length > 0);
+    assert.ok(validateArgs(offerCallParameters, { text: 'hi', voice: 42 }).length > 0);
   });
 });

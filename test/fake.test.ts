@@ -9,6 +9,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { JobId, JobStart } from '@deepseek-ai/dsh-jobs';
 import { FakeSttBackend, FakeTtsBackend, fakeTranscriptFrom } from '../src/backends/fake.ts';
 import { runTranscribe, type TranscribeDeps } from '../src/tools/transcribe.ts';
@@ -203,6 +204,30 @@ describe('speak job with the fake backend', () => {
       assert.equal(outcome.status, 'failed');
       assert.match(outcome.detail ?? '', /synthesis exploded/);
       assert.deepEqual(injected, ['synthesis exploded']);
+    });
+  });
+
+  it('stamps the owning agent onto the job spec (rc.6 web jobs need an owner)', async () => {
+    await withTempDir(async (dir) => {
+      const dest = join(dir, 'voice-speak-owned.m4a');
+      let started: JobStart | undefined;
+      const agent = { id: 'session-owned' } as unknown as Agent;
+      const deps: SpeakDeps = {
+        tts: new FakeTtsBackend(),
+        startJob: (spec) => {
+          started = spec;
+          return spec.kind as unknown as JobId;
+        },
+        owner: agent,
+        audioPath: () => dest,
+        appendNote: () => {},
+        injectFailure: () => { throw new Error('should not fail'); },
+        coords: () => ({ turn: 1, step: 1 }),
+        now: () => 1723600000000,
+      };
+      const handle = startSpeakJob(deps, { text: 'owned job' });
+      await handle.settled;
+      assert.equal(started?.owner, agent);
     });
   });
 });
