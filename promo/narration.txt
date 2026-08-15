@@ -1,39 +1,35 @@
-dsh-voice — promo narration (~70 seconds, 7 slides)
-====================================================
-Read this aloud while screen-recording. Each block starts on its slide; hold
-each slide ~9-10 seconds. Advance with the space bar or right arrow. Total
-run time ≈ 70 seconds.
+dsh-voice-call — promo narration (纯中文旁白 · dylan 北京话, ~68 秒, 7 页)
+==========================================================================
+录音方法：
+1. 打开 promo/slideshow.html，F11 全屏（放映第一页）
+2. 开始录屏（Windows: Win+G；或 OBS）
+3. 播放 promo/narration.wav（本旁白音轨，段间已含 2 秒停顿）
+4. 按下方时间轴在每段旁白开始前翻到对应页（空格 / → 翻页）
+5. 播放结束后停录
 
-[Slide 1 — hero]
-Meet dsh-voice: voice notes in, spoken answers out. Dictate what you need,
-and the agent reads its replies aloud. A hands-free terminal for DSH.
+时间轴（narration.wav 内时间码，共 68.2 秒）：
+------------------------------------------------------------------
+[0:00.0 — 第 1 页 · 开场]
+这个项目，给智能体一个它拥有的声音——由它主动打给你。
 
-[Slide 2 — what it is]
-Two tools. transcribe turns spoken audio into a real user message — the
-agent answers it like anything you typed. speak reads text aloud on a
-background job, without ever blocking the turn.
+[0:08.1 — 第 2 页 · 它能做什么]
+它能做三件事：主动来电、朗读回复、语音转文字。全部在后台运行，不阻塞任何操作。
 
-[Slide 3 — the pain]
-Two everyday moments a terminal handles badly. You're away from the
-keyboard and want to leave an instruction. Or you're mid-task and don't
-want to read a wall of output.
+[0:19.4 — 第 3 页 · 理念]
+智能体拥有拨号权，人类拥有接听权。不接听，绝不播放。
 
-[Slide 4 — the fix]
-So dsh-voice fixes both. Dictate a note — it becomes a user turn, with an
-audio card you can replay. Ask for the reply aloud — it is synthesized and
-spoken while you keep working.
+[0:28.1 — 第 4 页 · 一次真实的来电]
+当智能体觉得有值得说的话——一个里程碑、一个念头——它会振铃。你点接听，它开口。
 
-[Slide 5 — local-first]
-Everything stays local. Audio is plain files under tilde-slash-dsh-slash
-voice — inspect them, delete them. The session log holds only refs and
-transcripts. Nothing auto-runs, and audio only leaves your machine if you
-configure a cloud backend.
+[0:39.8 — 第 5 页 · 本地优先]
+合成跑在本机，音频只是文件。九个音色，两个中文方言，完全离线可用。
 
-[Slide 6 — details]
-Narration doubles as walk-away status on long builds. Slash-voice on flips
-spoken replies on live. Offline backends first: whisper, macOS speech, say,
-piper.
+[0:49.7 — 第 6 页 · 控制权]
+你始终握着控制权：拒接、推迟、随时关闭来电。拒接也是教育，它学会把话写下来。
 
-[Slide 7 — install]
-One command to install: dsh plugin, profile web, add, at-dsh-voice-slash-
-bundle. Voice notes in. Spoken answers out.
+[1:02.1 — 第 7 页 · 安装]
+一条命令安装完成，重启服务，你的智能体就有了自己的声音。
+------------------------------------------------------------------
+
+录制完成后：
+- 把录屏文件交给 agent，用 ffmpeg 转 GIF、裁剪、压缩后放进 README。

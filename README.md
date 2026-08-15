@@ -12,6 +12,10 @@
 </p>
 
 <p align="center">
+  <img src="promo/demo-small.gif" width="720" alt="dsh-voice-call 演示 —— 自动放映：旁白、翻页、字幕同步" />
+</p>
+
+<p align="center">
   <strong>中文</strong> · <a href="README.en.md">English</a>
 </p>
 

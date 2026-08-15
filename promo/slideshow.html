@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>dsh-voice — voice notes in, spoken answers out</title>
+<title>dsh-voice-call — the agent's voice, offered</title>
 <style>
   /* ------------------------------------------------------------------ *
    * dsh-voice promo slideshow — self-contained, no external assets.
@@ -378,11 +378,56 @@
     .meter .bar, .meter.quiet .bar.hot { animation: none; transform: scaleY(0.45); }
     .rec { animation: none; opacity: 0.6; }
   }
+  /* --- auto-show launch overlay + captions ---------------------------- */
+  #launch {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+    background: radial-gradient(900px 600px at 50% 40%, #0b1120 0%, #04050a 70%) fixed, #04050a;
+    z-index: 100;
+  }
+  #launch.gone { display: none; }
+  #launch button {
+    font-family: var(--display);
+    font-size: 28px; font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--voice-ink);
+    background: var(--voice);
+    border: 0; border-radius: 999px;
+    padding: 22px 58px;
+    cursor: pointer;
+    box-shadow: 0 14px 44px rgba(255, 180, 84, 0.28);
+  }
+  #launch button:hover { filter: brightness(1.08); }
+  #launch p { color: var(--muted); font-size: 16px; letter-spacing: 0.04em; }
+  #captions {
+    position: fixed;
+    left: 50%; bottom: 26px;
+    transform: translateX(-50%);
+    max-width: 1120px; width: max-content;
+    background: rgba(4, 5, 10, 0.80);
+    border: 1px solid var(--line);
+    color: var(--paper);
+    font-family: var(--display);
+    font-size: 22px; line-height: 1.5;
+    padding: 12px 28px;
+    border-radius: 12px;
+    text-align: center;
+    z-index: 60;
+    display: none;
+  }
+  #captions.show { display: block; }
 </style>
 </head>
 <body>
 
-<main class="stage" id="stage" aria-roledescription="slideshow" aria-label="dsh-voice promo">
+<div id="launch" aria-label="start the auto show">
+  <button type="button" id="startBtn">▶ 开始放映</button>
+  <p>旁白自动播放 · 翻页自动同步 · 底部实时字幕</p>
+</div>
+
+<main class="stage" id="stage" aria-roledescription="slideshow" aria-label="dsh-voice-call promo">
   <!-- 1 · hero -->
   <section class="slide" data-index="0" aria-hidden="true">
     <div class="hero-meters" aria-hidden="true">
@@ -391,11 +436,11 @@
     </div>
     <div class="hero-copy">
       <p class="eyebrow r" style="--d:0">DeepSeek Harness · voice layer</p>
-      <h1 class="r" style="--d:60">VOICE NOTES IN.<br><span class="amp">SPOKEN</span> ANSWERS OUT.</h1>
-      <p class="sub r" style="--d:150">A hands-free terminal for DSH.</p>
+      <h1 class="r" style="--d:60">THE AGENT'S VOICE,<br><span class="amp">OFFERED</span>.</h1>
+      <p class="sub r" style="--d:150">It rings when it has something worth saying.</p>
       <div class="hero-tags">
-        <span class="tag r" style="--d:230"><b>dictate</b>&nbsp;→ user message</span>
-        <span class="tag r" style="--d:290">replies read aloud</span>
+        <span class="tag r" style="--d:230"><b>offer_call</b>&nbsp;→ rings the human</span>
+        <span class="tag r" style="--d:290">接听 · 拒接 · 稍后再说</span>
         <span class="tag r" style="--d:350">local-first</span>
       </div>
     </div>
@@ -404,71 +449,72 @@
   <!-- 2 · what it is -->
   <section class="slide" data-index="1" aria-hidden="true">
     <p class="eyebrow r" style="--d:0">What it is</p>
-    <h2 class="r" style="--d:60">TWO TOOLS.<br>NO BLOCKING.</h2>
+    <h2 class="r" style="--d:60">A VOICE.<br>IT OWNS.</h2>
     <div class="cards">
       <div class="card r" style="--d:160">
-        <p class="kicker">transcribe</p>
-        <h3>Dictate</h3>
-        <p>Spoken audio becomes a <b>real user message</b> — the agent answers it like anything you typed.</p>
+        <p class="kicker">offer_call</p>
+        <h3>Ring</h3>
+        <p>The agent calls <b>you</b> when it decides something is worth saying aloud — a milestone, a thought, a feeling.</p>
         <div class="meter slim" aria-hidden="true"></div>
       </div>
       <div class="card r" style="--d:240">
         <p class="kicker">speak</p>
-        <h3>Listen</h3>
-        <p>Text is read aloud on a <b>background job</b> — the turn returns instantly, playback happens async.</p>
+        <h3>Say</h3>
+        <p>Direct TTS on a <b>background job</b> — the turn returns instantly, playback happens async on your speakers.</p>
         <div class="meter slim" aria-hidden="true"></div>
       </div>
     </div>
+    <div class="chips" style="margin-top:26px">
+      <span class="chip offline">transcribe — voice in, user message out</span>
+    </div>
   </section>
 
-  <!-- 3 · the pain -->
+  <!-- 3 · the idea -->
   <section class="slide" data-index="2" aria-hidden="true">
-    <p class="eyebrow r" style="--d:0">The pain</p>
-    <h2 class="r" style="--d:60">THE KEYBOARD<br>IS THE BOTTLENECK.</h2>
+    <p class="eyebrow r" style="--d:0">The idea</p>
+    <h2 class="r" style="--d:60">THE AGENT DIALS.<br>YOU ANSWER.</h2>
     <div class="moments">
       <div class="moment r" style="--d:160">
-        <span class="n">moment 01 — hands busy</span>
-        <h3>Away from the keyboard</h3>
-        <p>You want to leave an instruction. Typing it is the friction.</p>
+        <span class="n">the dialling right</span>
+        <h3>The agent decides</h3>
+        <p>It calls <code>offer_call</code> when <i>it</i> thinks something is worth saying aloud.</p>
       </div>
       <div class="moment r" style="--d:240">
-        <span class="n">moment 02 — eyes busy</span>
-        <h3>Mid-task output</h3>
-        <p>You don't want to read a wall of output while you're working.</p>
-        <pre class="wall">▸ 128 passed · 3 skipped
-▸ lint: 0 errors · 0 warnings
-▸ typecheck: clean
-▸ bundle: 4,812 modules · 2.4 MB gzip
-▸ tests: 46/46 green
-▸ coverage: 94% · branch 91%</pre>
+        <span class="n">the answer key</span>
+        <h3>You decide</h3>
+        <p>A call rings as a modal — <b>nothing ever plays without consent.</b></p>
+        <div class="chips">
+          <span class="chip offline">接听</span>
+          <span class="chip offline">拒接</span>
+          <span class="chip offline">稍后再说</span>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- 4 · the fix -->
+  <!-- 4 · a real call -->
   <section class="slide" data-index="3" aria-hidden="true">
-    <p class="eyebrow r" style="--d:0">The fix</p>
-    <h2 class="r" style="--d:60">DICTATE. LISTEN.<br>KEEP MOVING.</h2>
+    <p class="eyebrow r" style="--d:0">A real call</p>
+    <h2 class="r" style="--d:60">RING. ANSWER.<br>IT SPEAKS.</h2>
     <div class="flow">
       <div class="leg r" style="--d:160">
-        <span class="dir"><b>IN</b> · dictation</span>
+        <span class="dir"><b>IN</b> · the ring</span>
         <div class="meter slim" aria-hidden="true"></div>
-        <p class="line">"Run the tests when the build finishes."</p>
+        <p class="line">"构建完成，76 个测试全绿。值得庆祝。"</p>
         <div class="card">
-          <span class="play">▶</span>
-          <span class="txt">voice-note · you spoke · 3.2s</span>
+          <span class="play">📞</span>
+          <span class="txt">offer_call · the agent · ringing</span>
         </div>
-        <p class="sub" style="font-size:17px">…becomes a <b>user turn</b>, with an audio card you can replay.</p>
       </div>
       <div class="leg r" style="--d:240">
-        <span class="dir"><b>OUT</b> · narration</span>
+        <span class="dir"><b>OUT</b> · the answer</span>
         <div class="meter slim" aria-hidden="true"></div>
-        <p class="line">"Build finished, 0 failures."</p>
+        <p class="line">接听 → synthesized + playing on your speakers</p>
         <div class="card">
           <span class="play">▶</span>
-          <span class="txt">voice-note · agent spoke · 2.1s</span>
+          <span class="txt">voice-speak · accepted</span>
         </div>
-        <p class="sub" style="font-size:17px">…synthesized and <b>spoken aloud</b> while you keep working.</p>
+        <p class="sub" style="font-size:17px">…rejected or deferred? The decision returns to the agent — it writes it down instead.</p>
       </div>
     </div>
   </section>
@@ -480,59 +526,62 @@
     <div class="local-grid">
       <div class="files r" style="--d:150">
         <p class="path">~/.dsh/voice/</p>
-        <div class="row"><span>voice-in-abc.m4a</span><span class="sz">72 KB</span></div>
-        <div class="row"><span>voice-speak-1.m4a</span><span class="sz">48 KB</span></div>
-        <div class="row"><span>voice-in-def.m4a</span><span class="sz">61 KB</span></div>
+        <div class="row"><span>voice-speak-1.wav</span><span class="sz">212 KB</span></div>
+        <div class="row"><span>voice-speak-2.wav</span><span class="sz">186 KB</span></div>
+        <div class="row"><span>voice-speak-3.wav</span><span class="sz">98 KB</span></div>
         <div class="row"><span>…</span><span class="sz"></span></div>
       </div>
       <div class="facts">
-        <div class="fact r" style="--d:200"><span class="mark">✓</span><span class="t">Log holds <code>refs + transcripts</code> only — never raw bytes.</span></div>
-        <div class="fact r" style="--d:270"><span class="mark">✓</span><span class="t"><code>rm</code> any file anytime — the card degrades gracefully.</span></div>
-        <div class="fact r" style="--d:340"><span class="mark">✓</span><span class="t">Nothing auto-runs. Cloud only if <code>you</code> configure it.</span></div>
+        <div class="fact r" style="--d:200"><span class="mark">✓</span><span class="t">Synthesis runs on local <code>CrispASR + Qwen3-TTS</code> — offline-capable.</span></div>
+        <div class="fact r" style="--d:270"><span class="mark">✓</span><span class="t"><code>9 speakers</code>, two Chinese dialects: dylan · eric.</span></div>
+        <div class="fact r" style="--d:340"><span class="mark">✓</span><span class="t">Nothing audio-related <code>ever</code> auto-runs without a tool call.</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 6 · details / commands -->
+  <!-- 6 · control -->
   <section class="slide" data-index="5" aria-hidden="true">
     <p class="eyebrow r" style="--d:0">Control</p>
-    <h2 class="r" style="--d:60">NARRATION,<br>WHEN YOU WANT IT.</h2>
+    <h2 class="r" style="--d:60">YOU HOLD<br>THE ANSWER KEY.</h2>
     <div class="term r" style="--d:150">
-      <span class="rec" aria-hidden="true"></span><span class="cmd">/voice on</span>
-      <span class="desc">flip <b>readReplies</b> on live — the assistant reads its answers aloud</span>
+      <span class="rec" aria-hidden="true"></span><span class="cmd">/voice</span>
+      <span class="desc">status · <b>on|off</b> narration · speak &lt;text&gt;</span>
     </div>
     <div class="term r" style="--d:230">
-      <span class="cmd">speak(</span>
-      <span class="desc">"build finished, 0 failures"<b>)</b> — walk-away status on long headless runs</span>
+      <span class="cmd">callMode</span>
+      <span class="desc"><b>ask</b> · direct · off — how calls ring the human</span>
     </div>
     <div class="chips">
-      <span class="chip offline">whisper-local</span>
-      <span class="chip offline">macos</span>
-      <span class="chip offline">say</span>
-      <span class="chip offline">piper</span>
-      <span class="chip cloud">openai · edge-tts — only when you say so</span>
+      <span class="chip offline">aiden</span>
+      <span class="chip offline">dylan · 北京话</span>
+      <span class="chip offline">eric · 四川话</span>
+      <span class="chip offline">sohee</span>
+      <span class="chip cloud">9 CustomVoice speakers · pick one</span>
     </div>
   </section>
 
   <!-- 7 · install -->
   <section class="slide" data-index="6" aria-hidden="true">
     <p class="eyebrow r" style="--d:0">Install</p>
-    <h2 class="r" style="--d:60">VOICE NOTES IN.<br>SPOKEN ANSWERS OUT.</h2>
+    <h2 class="r" style="--d:60">THE AGENT'S VOICE.<br>OFFERED.</h2>
     <div class="install r" style="--d:170">
       <div class="meter slim" aria-hidden="true"></div>
-      <p class="line"><span class="prompt">$ </span>dsh plugin --profile web add <span class="pkg">@dsh-voice/bundle</span></p>
+      <p class="line"><span class="prompt">$ </span>dsh plugin --profile web add <span class="pkg">dsh-voice-call</span></p>
     </div>
-    <p class="sub r" style="--d:280">One command. Local-first by default. Hands-free DSH.</p>
+    <p class="sub r" style="--d:280">One command. Local-first. The answer key is yours.</p>
   </section>
 
   <!-- chrome -->
   <footer class="chrome">
-    <span class="wordmark"><span class="dotmark" aria-hidden="true"></span>dsh·voice</span>
+    <span class="wordmark"><span class="dotmark" aria-hidden="true"></span>dsh·voice·call</span>
     <div class="dots" id="dots" role="tablist" aria-label="Slides"></div>
     <span class="counter"><b id="cur">01</b> / <span id="total">07</span></span>
   </footer>
-  <div class="hint" id="hint">space / → to advance · f for fullscreen</div>
+  <div class="hint" id="hint">点击 ▶ 开始放映 · 旁白与翻页自动同步 · f 全屏</div>
 </main>
+
+<audio id="narrationAudio" src="narration.wav" preload="auto"></audio>
+<div id="captions" aria-live="polite"></div>
 
 <script>
 (function () {
@@ -633,6 +682,38 @@
   slides[start].setAttribute('aria-hidden', 'false');
   DOTS[start].setAttribute('aria-current', 'true');
   curEl.textContent = String(start + 1).padStart(2, '0');
+
+  // --- auto show: narration.wav + timed page turns + captions -----------
+  var TIMELINE = [
+    { at: 0.0, page: 0, text: '这个项目，给智能体一个它拥有的声音——由它主动打给你。' },
+    { at: 8.1, page: 1, text: '它能做三件事：主动来电、朗读回复、语音转文字。全部在后台运行，不阻塞任何操作。' },
+    { at: 19.4, page: 2, text: '智能体拥有拨号权，人类拥有接听权。不接听，绝不播放。' },
+    { at: 28.1, page: 3, text: '当智能体觉得有值得说的话——一个里程碑、一个念头——它会振铃。你点接听，它开口。' },
+    { at: 39.8, page: 4, text: '合成跑在本机，音频只是文件。九个音色，两个中文方言，完全离线可用。' },
+    { at: 49.7, page: 5, text: '你始终握着控制权：拒接、推迟、随时关闭来电。拒接也是教育，它学会把话写下来。' },
+    { at: 62.1, page: 6, text: '一条命令安装完成，重启服务，你的智能体就有了自己的声音。' }
+  ];
+  var launch = document.getElementById('launch');
+  var startBtn = document.getElementById('startBtn');
+  var captions = document.getElementById('captions');
+  var narration = document.getElementById('narrationAudio');
+  startBtn.addEventListener('click', function () {
+    launch.classList.add('gone');
+    captions.classList.add('show');
+    TIMELINE.forEach(function (item) {
+      setTimeout(function () {
+        go(item.page);
+        captions.textContent = item.text;
+      }, item.at * 1000);
+    });
+    narration.currentTime = 0;
+    var p = narration.play();
+    if (p !== undefined) {
+      p.catch(function () {
+        captions.textContent = '⚠ 旁白播放被浏览器拦截——请点击页面任意位置后重试';
+      });
+    }
+  });
 })();
 </script>
 </body>

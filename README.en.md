@@ -12,6 +12,10 @@
 </p>
 
 <p align="center">
+  <img src="promo/demo-small.gif" width="720" alt="dsh-voice-call demo — auto show with narration, page turns and captions in sync" />
+</p>
+
+<p align="center">
   <a href="README.md">中文</a> · <strong>English</strong>
 </p>
 
