@@ -1,13 +1,14 @@
 # dsh-voice-call —— agent 拥有的声音，由它主动打给你
 
 <p align="center">
-  <img src="docs/logo.svg" width="120" alt="dsh-voice-call 标志 —— 声波与一颗心" />
+  <img src="docs/logo.svg" width="120" alt="dsh-voice-call 标志 —— 一声向外荡开的振铃" />
 </p>
 
 <p align="center">
   <a href="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml"><img src="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
+  <img src="https://img.shields.io/badge/harness-0.1.2--rc.1-5b5bd6" alt="DSH 0.1.2-rc.1" />
   <img src="https://img.shields.io/badge/tests-76%20green-1f883d" alt="76 个测试全绿" />
 </p>
 
