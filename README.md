@@ -99,7 +99,7 @@ dsh plugin --profile web add dsh-voice-call
 | 平台 | Windows 10/11 · macOS · Linux |
 | Node.js | **≥ 20**（插件运行要求）；运行测试需要 22.18+（Node 原生 TS 类型剥离） |
 | pnpm | 9+（CI 使用 pnpm 11） |
-| dsh CLI | `@deepseek-ai/dsh`，当前 0.1.0-rc.6 |
+| dsh CLI | `@deepseek-ai/dsh`，当前 0.1.2-rc.1 |
 | 本地语音引擎 | CrispASR ≥ 0.8.28 + Qwen3-TTS GGUF 模型（推荐，否则没有本地合成音色） |
 | 模型提供商 | dsh 需要已配置可用的 LLM API 凭据（agent 本身依赖） |
 
@@ -107,7 +107,7 @@ dsh plugin --profile web add dsh-voice-call
 
 ```bash
 npm install -g @deepseek-ai/dsh
-dsh --version    # 期望输出 0.1.0-rc.6
+dsh --version    # 期望输出 0.1.2-rc.1
 ```
 
 - 确认模型提供商凭据已配置（dsh 跑 agent 需要 API key）。
@@ -243,8 +243,8 @@ dsh web
 
 | 方面 | 状态 |
 |---|---|
-| harness | 0.1.0-rc.6（peerDependencies 锁定 rc.6）。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 rc.6 的 Web 组合禁用了 host 平面的 `tool-jobs`。 |
-| 会话事件 | **rc.6 没有插件事件注册机制**。写入 `voice/*` 事件会毒死历史加载（加载器拒绝未知事件类型）。因此 `durableEvents` 默认 `false`；在 harness 支持插件事件之前保持关闭。 |
+| harness | 0.1.2-rc.1（peerDependencies 声明 `^0.1.2-rc.1`；0.1.2 起客户端节点引擎并入 `dsh-client-ui-conversation`/`dsh-client-ui-chat`，不再依赖 `dsh-client-runtime`）。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 Web 组合禁用了 host 平面的 `tool-jobs`。 |
+| 会话事件 | 0.1.2-rc.1 引入了 `SessionEvent.ignorable` 信封标记作为外部事件兼容机制，但 `Session.append` 仍不允许插件事件自行标记，本插件也未迁移该路径。`durableEvents` 保持默认 `false`；在插件事件持久化验证通过之前请勿开启。 |
 | 播放 | Windows：内置 `SoundPlayer`（已实测）。macOS：`afplay`。Linux：`aplay`（需安装 ALSA 工具）。`edge-tts` 只合成不播放——要听到声音请用本地 wav 后端。 |
 | 录音 | 仅 macOS（原生 + ffmpeg）。Windows/Linux 的 `transcribe({record})` 会明确提示不可用。 |
 | Shell 沙箱 | 本地引擎命令以显式 `danger-full-access` 策略运行——引擎二进制、GGUF 模型、音频目录跨越了受限沙箱模式无法覆盖的多个根。**部署前请评估此信任边界。** |

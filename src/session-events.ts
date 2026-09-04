@@ -32,7 +32,7 @@ export function currentCoords(session: Session | undefined): { readonly turn: nu
   if (session === undefined) return { turn: 0, step: 0 };
   let turn = 0;
   let step = 0;
-  for (const event of session.events) {
+  for (const event of session.snapshotEvents()) {
     if (event.type === 'turn/start') turn = event.data.turn;
     else if (event.type === 'step/start') step = event.data.step;
   }

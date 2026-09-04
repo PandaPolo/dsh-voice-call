@@ -7,13 +7,13 @@
  * @module dsh-voice/settings
  */
 import type { Context } from '@deepseek-ai/cordis';
+import type { SettingsProvider } from '@deepseek-ai/dsh-settings';
 import z from '@deepseek-ai/schemastery';
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings';
 import { resolveConfig } from './types.ts';
 import type { VoiceConfig, VoiceConfigInput } from './types.ts';
 
 /** The `voice` settings namespace. */
-export const NS = settingsNamespace('voice');
+export const NS = 'voice' as const;
 
 const backendSchema = (options: readonly string[]) => z.union([...options]);
 
@@ -69,7 +69,8 @@ export const Config = z.object({
  */
 export function installVoiceSettings(ctx: Context, entry: VoiceConfigInput, onChange?: () => void): () => VoiceConfig {
   let current: () => VoiceConfig = () => resolveConfig(entry);
-  installSettingsSection(ctx, NS, Config, entry, {
+  const provider = ctx.get('settings') as SettingsProvider | undefined;
+  provider?.installSection(ctx, NS, Config, resolveConfig(entry), {
     setSource: (source) => {
       current = () => resolveConfig(source() as VoiceConfigInput);
     },

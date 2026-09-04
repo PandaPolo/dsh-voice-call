@@ -8,7 +8,7 @@
  * @module dsh-voice/client/view
  */
 import { createElement, useEffect, useRef, useState } from 'react';
-import type { ChatNodeViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client';
+import type { ChatNodeViewProps } from '@deepseek-ai/dsh-client-ui-chat/client';
 import { transcriptOnlyCard } from './definition.ts';
 import { audioUrlOf } from './types.ts';
 

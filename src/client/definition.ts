@@ -10,25 +10,25 @@
  *
  * @module dsh-voice/client/definition
  */
+import type { SessionEventLike } from '@deepseek-ai/dsh-api-session-controller/client';
+import type { ChatConversationViewNode } from '@deepseek-ai/dsh-client-ui-chat/client';
 import type {
-  ChatConversationViewNode,
   ConversationLocation,
   ConversationNodeContext,
   ConversationNodeDefinition,
-} from '@deepseek-ai/dsh-client-runtime/client';
-import type { SessionEvent } from '@deepseek-ai/dsh-session/types';
+} from '@deepseek-ai/dsh-client-ui-conversation/client';
 import type { VoiceNoteCardData, VoiceNoteEventData } from './types.ts';
 
 /** The `voice-note` chat node payload, registered into the UI payload map. */
 export interface VoiceNoteChatData extends VoiceNoteCardData {}
 
-declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
+declare module '@deepseek-ai/dsh-client-ui-chat/client' {
   interface ChatNodeDataMap {
     'voice-note': VoiceNoteChatData;
   }
 }
 
-declare module '@deepseek-ai/dsh-client-runtime/client' {
+declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
   interface ConversationStepDataMap {
     'voice-note': VoiceNoteChatData;
   }
@@ -41,7 +41,7 @@ export interface VoiceNoteState extends VoiceNoteCardData {
 }
 
 /** The Definition-local stable identity of one `voice/note` event. */
-export function noteIdOf(event: SessionEvent): string | null {
+export function noteIdOf(event: SessionEventLike): string | null {
   if (event.type !== 'voice/note') return null;
   const data = event.data as unknown as VoiceNoteEventData;
   return String(data.noteId);

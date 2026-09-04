@@ -103,7 +103,7 @@ Accept the ring, and the agent's voice plays on your speakers. For the full setu
 | Platform | Windows 10/11 · macOS · Linux |
 | Node.js | **≥ 20** (plugin runtime); tests need 22.18+ (Node's native TS type-stripping) |
 | pnpm | 9+ (CI uses pnpm 11) |
-| dsh CLI | `@deepseek-ai/dsh`, currently 0.1.0-rc.6 |
+| dsh CLI | `@deepseek-ai/dsh`, currently 0.1.2-rc.1 |
 | Local voice engine | CrispASR ≥ 0.8.28 + Qwen3-TTS GGUF models (recommended — without it there is no local synthesis) |
 | LLM provider | a working API credential for dsh (the agent itself depends on it) |
 
@@ -111,7 +111,7 @@ Accept the ring, and the agent's voice plays on your speakers. For the full setu
 
 ```bash
 npm install -g @deepseek-ai/dsh
-dsh --version    # expect 0.1.0-rc.6
+dsh --version    # expect 0.1.2-rc.1
 ```
 
 - Make sure your model-provider credential is configured (dsh needs an API key to run an agent).
@@ -247,8 +247,8 @@ dsh web
 
 | Area | Status |
 |---|---|
-| Harness | 0.1.0-rc.6 (peerDependencies pinned to rc.6). The plugin lives on the host plane; background jobs must carry `owner: agent` because rc.6 disables host-plane `tool-jobs` in the Web composition. |
-| Session events | **rc.6 has no plugin-event registration surface.** Appending `voice/*` events poisons history loading (the loader refuses unknown event types). `durableEvents` therefore defaults to `false`; keep it off until a harness with plugin-event support exists. |
+| Harness | 0.1.2-rc.1 (peerDependencies declared as `^0.1.2-rc.1`; since 0.1.2 the client node engine lives in `dsh-client-ui-conversation`/`dsh-client-ui-chat`, no longer `dsh-client-runtime`). The plugin lives on the host plane; background jobs must carry `owner: agent` because the Web composition disables host-plane `tool-jobs`. |
+| Session events | 0.1.2-rc.1 introduced the `SessionEvent.ignorable` envelope marker as the external-event compatibility mechanism, but `Session.append` still gives plugin events no way to set it and this plugin has not migrated to that path. `durableEvents` stays `false` by default; keep it off until plugin-event persistence is verified. |
 | Playback | Windows: built-in `SoundPlayer` (verified). macOS: `afplay`. Linux: `aplay` (install ALSA utils). `edge-tts` synthesizes only — use a local wav backend for audible output. |
 | Recording | macOS only (native + ffmpeg). Windows/Linux `transcribe({record})` reports unavailability cleanly. |
 | Shell sandbox | Local engine commands run with an explicit `danger-full-access` policy — the engine binaries, GGUF models, and audio dir span roots no confined sandbox mode covers. **Evaluate this trust boundary before deploying.** |

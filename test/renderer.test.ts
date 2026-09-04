@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { ConversationMatch, ConversationNodeContext } from '@deepseek-ai/dsh-client-runtime/client';
+import type { ConversationLocation, ConversationMatch, ConversationNodeContext } from '@deepseek-ai/dsh-client-ui-conversation/client';
 import { locationOf, transcriptOnlyCard, viewData, voiceNoteDefinition } from '../src/client/definition.ts';
 import type { VoiceNoteState } from '../src/client/definition.ts';
 import { audioUrlOf } from '../src/client/types.ts';
@@ -20,7 +20,7 @@ function startMatch(event: ReturnType<typeof voiceNoteEvent>): ConversationMatch
   return {
     event: event as never,
     role: 'start',
-    location: { kind: 'turn', turn: { turn: 2, start: undefined, end: undefined, status: 'open', steps: [], data: { get: () => undefined } } },
+    location: { kind: 'turn', turn: { turn: 2, start: undefined, end: undefined, status: 'open', steps: [], data: { get: () => undefined, source: () => ({ getSnapshot: () => undefined, subscribe: () => () => {} }) } } } as ConversationLocation,
   };
 }
 
