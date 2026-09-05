@@ -1,19 +1,26 @@
 /**
- * FUTURE RPC contracts (v0.2+): the client↔host endpoints a dedicated
- * call-card UI will use to answer calls and report playback. RESERVED in v0.1
- * — nothing here is registered or served yet. Keeping the endpoint names and
- * payload shapes fixed now means a v0.2 card UI can ship without touching the
- * host plugin's call domain.
+ * RPC contracts for the dedicated call-card UI. RESERVED in v0.1, SHIPPED in
+ * v0.2 over the webserver seam: the DSH 0.1.2-rc.1 baseline has no
+ * client-connection RPC surface yet, so the card transport rides the same
+ * `webServer.register` gap as the audio route, and the reserved payload
+ * shapes here cross the wire verbatim.
  *
- * Transport: `@deepseek-ai/dsh-client-connection` — the browser calls
- * `createWebConnectionRpc().call('/api', endpoint, payload)` and the host
- * registers handlers via `ctx.connection.rpc.intercept('/api', matcher,
- * handler, { authority: 'loopback' })`.
+ * v0.2 wire map (see `src/callcard/web.ts`):
+ * - `RPC_VOICE_ANSWER` (`voice/answer`) → `POST /voice/call/answer`, body
+ *   `VoiceAnswerPayload`, response `VoiceAnswerResult`.
+ * - The host→card direction (the ring itself) streams as SSE on
+ *   `GET /voice/call/events` (`ringing` / `settled` events carrying
+ *   `CallCardRingState` / `CallCardSettledState`), with `GET /voice/call/state`
+ *   as the polling equivalent.
+ *
+ * When a harness build gains a real connection-RPC surface, these endpoints
+ * migrate onto it with the SAME payload types — the call domain and the card
+ * UI keep their shapes; only the transport moves.
  *
  * @module dsh-voice-call/rpc/contract
  */
 
-/** Endpoint: the human answered a ringing call from the call-card UI. */
+/** Endpoint: the human answered a ringing call from the call-card UI (v0.2: `POST /voice/call/answer`). */
 export const RPC_VOICE_ANSWER = 'voice/answer' as const;
 export interface VoiceAnswerPayload {
   readonly callId: string;

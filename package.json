@@ -1,7 +1,7 @@
 {
   "name": "dsh-voice-call",
-  "version": "0.1.1",
-  "description": "dsh-voice-call — give the agent a voice it owns: the agent decides when to speak (offer_call), the human holds the answer key (接听/拒接/稍后). Local-first TTS via CrispASR + Qwen3-TTS CustomVoice, plain audio files under ~/.dsh/voice/. Fork of dsh-voice with a call-domain, crispasr backend, and upgrade-ready contracts (voicemail, read receipts, call-card UI).",
+  "version": "0.2.0",
+  "description": "dsh-voice-call — give the agent a voice it owns: the agent decides when to speak (offer_call), the human holds the answer key (接听/拒接/稍后). Local-first TTS via CrispASR + Qwen3-TTS CustomVoice, plain audio files under ~/.dsh/voice/. Fork of dsh-voice with a call domain, crispasr backend, a dedicated call-card UI (ring animation, caller identity; v0.2), and upgrade-ready contracts (voicemail, read receipts).",
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -10,6 +10,7 @@
     "tts",
     "text-to-speech",
     "call",
+    "call-card",
     "qwen3-tts",
     "crispasr",
     "local-first",
@@ -116,6 +117,7 @@
     "@deepseek-ai/schemastery": "^3.18.1",
     "@types/node": "^24.13.3",
     "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.7",
     "esbuild": "^0.25.0",
     "react": "^18.2.0",
     "typescript": "^5.9.0"

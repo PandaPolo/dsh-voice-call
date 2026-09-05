@@ -52,7 +52,11 @@ export const Config = z.object({
   // Must mirror index.ts Config: appending voice/* session events poisons
   // history loading on harness builds without plugin-event support.
   durableEvents: z.boolean().default(false),
-  callMode: z.union(['ask', 'direct', 'off']).default('ask'),
+  callMode: z.union(['ask', 'card', 'direct', 'off']).default('ask'),
+  callCard: z.object({
+    callerName: z.string(),
+    ringTimeoutMs: z.number().min(1000).max(600_000),
+  }),
   audioDir: z.string(),
   // Reserved for v0.3 — accepted now so configs written against v0.1 keep loading.
   voicemail: z.object({ enabled: z.boolean() }),

@@ -12,6 +12,7 @@
  * @module @dsh-voice/bundle/client
  */
 import type { Context } from '@deepseek-ai/cordis';
+import { mountCallCard } from './callcard.tsx';
 import { voiceNoteDefinition } from './definition.ts';
 import { VoiceNoteView } from './view.tsx';
 
@@ -24,15 +25,19 @@ interface SlotRegistry {
   inject(name: string, contributor: () => void): () => void;
 }
 
-/** Mount the node Definition and the chat renderer. */
+/** Mount the node Definition, the chat renderer, and the v0.2 call-card overlay. */
 export function apply(ctx: Context): void {
   ctx.uiConversation.events.register(voiceNoteDefinition);
   const slots = ctx.get('slots') as SlotRegistry | undefined;
-  if (slots === undefined) return;
-  slots.inject('conversation.chat.node', () => slots.register({
-    name: 'conversation.chat.node',
-    key: 'voice-note',
-    // The chat-node slot's `t` seat is typed to the ui-conversation namespace.
-    locale: 'conversation',
-  }, VoiceNoteView));
+  if (slots !== undefined) {
+    slots.inject('conversation.chat.node', () => slots.register({
+      name: 'conversation.chat.node',
+      key: 'voice-note',
+      // The chat-node slot's `t` seat is typed to the ui-conversation namespace.
+      locale: 'conversation',
+    }, VoiceNoteView));
+  }
+  // The call-card overlay rides its own transport (`/voice/call` routes); it
+  // degrades independently — no webserver routes, no card, v0.1 keeps working.
+  ctx.effect(() => mountCallCard(), 'call-card overlay');
 }

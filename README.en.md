@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/harness-0.1.2--rc.1-5b5bd6" alt="DSH 0.1.2-rc.1" />
-  <img src="https://img.shields.io/badge/tests-76%20green-1f883d" alt="76 tests green" />
+  <img src="https://img.shields.io/badge/tests-87%20green-1f883d" alt="87 tests green" />
 </p>
 
 <p align="center">
@@ -69,23 +69,24 @@ If you fork, improve, or build on this project, please keep this note — it is 
 ## 🌹 The idea
 
 - **The agent owns the dialling right.** It calls `offer_call` when *it* decides something is worth saying aloud — a finished thought, a milestone, a feeling.
-- **The human owns the answer key.** A call rings as a modal (接听 / 拒接 / 稍后再说); nothing is ever played without consent.
+- **The human owns the answer key.** A call rings as a dedicated call card or a modal (接听 / 拒接 / 稍后再说); nothing is ever played without consent.
 - **Rejection teaches.** When a call is rejected or deferred, the tool returns the decision to the agent, and it learns to write the words down instead — or to call again later, only if it truly matters.
 
 ## ✨ Features
 
 - `offer_call({ text, voice? })` — the call domain: ring → human answers → accepted calls synthesize and play on a background job; rejected/deferred calls return the decision to the agent.
+- **Dedicated call-card UI (v0.2)** — with `callMode: card` a call rings as a floating card: twin pulse animation, caller identity (name + session tail + voice badge), a preview of what the agent wants to say, and an automatic `missed` on ring timeout. Falls back to the modal prompt when no web client is connected.
 - `speak({ text, voice?, rate? })` — direct TTS on a background job with **real local playback** (PowerShell `SoundPlayer` on Windows, `afplay` on macOS, `aplay` on Linux).
 - `transcribe({ source, to? })` — speech-to-text into a user message (whisper-local / openai / macOS native); optional crosstalk delivery to another session.
 - `/voice` command — status, `on|off` narration toggle, `speak <text>`.
 - **9 CustomVoice speakers** including two Chinese dialects: `aiden` · `dylan` (Beijing) · `eric` (Sichuan) · `ono_anna` · `ryan` · `serena` · `sohee` · `uncle_fu` · `vivian`.
 - **durableEvents gate** — session-event logging is off by default (see Compatibility), so sessions stay resumable on rc.6.
-- **Published on npm**: install `dsh-voice-call@0.1.0` directly.
+- **Published on npm**: install `dsh-voice-call@0.2.0` directly.
 
 ## 🚀 Quick start
 
 ```bash
-# 1) install the plugin (from npm, v0.1.0)
+# 1) install the plugin (from npm, v0.2.0)
 dsh plugin --profile web add dsh-voice-call
 
 # 2) update the row by id in your profile's cordis.patch.yml (engine paths etc. — see "Local deployment" below)
@@ -177,7 +178,10 @@ Full example (Windows):
         bin: D:\crispasr\crispasr.exe                          # engine binary (absolute path)
         model: D:\crispasr\models\qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf
         codec: D:\crispasr\models\qwen3-tts-tokenizer-12hz-q8_0.gguf
-    callMode: ask              # ask (modal) | direct (auto-accept) | off (refuse calls)
+    callMode: card             # card (dedicated call card) | ask (modal) | direct (auto-accept) | off (refuse calls)
+    callCard:                  # v0.2 call-card look & ring behaviour (used when callMode: card)
+      callerName: DeepSeek     # caller name shown on the card
+      ringTimeoutMs: 30000     # ring timeout; an expired call settles as missed (never hangs the agent)
     readReplies: false         # read replies aloud; can be toggled live via /voice on
     durableEvents: false       # MUST stay false on rc.6 (see Compatibility)
     audioDir: ~/.dsh/voice     # audio file directory
@@ -195,7 +199,9 @@ Config fields at a glance:
 | `tts.rate` | 1–600 | speaking rate (words/min) |
 | `tts.crispasr` | `bin` / `model` / `codec` | **absolute paths** to the engine and both GGUF models |
 | `stt.backend` | `whisper-local` / `openai` / `macos` / `fake` | leave empty to auto-probe |
-| `callMode` | `ask` / `direct` / `off` | how calls ring the human |
+| `callMode` | `card` / `ask` / `direct` / `off` | how calls ring the human |
+| `callCard.callerName` | any name | caller name on the call card, default `DeepSeek` |
+| `callCard.ringTimeoutMs` | 1000–600000 | ring timeout in ms, default 30000; expiry settles as `missed` |
 | `readReplies` | `true` / `false` | narration, default `false` |
 | `durableEvents` | `true` / `false` | MUST be `false` on rc.6 |
 | `audioDir` | path | audio output dir, default `~/.dsh/voice` |
@@ -213,7 +219,8 @@ dsh web
 1. Open a session and type `/voice` — you should see `stt: … · tts: crispasr · readReplies: off` plus `audioDir: …`;
 2. Ask the agent: "use the `speak` tool to say 'hello'." — success means you heard it;
 3. Full call test: "you have an `offer_call` tool — call me when you have something worth saying." Click **接听** and the agent's voice comes out of your speakers;
-4. For config debugging, run `dsh --profile web --dump-config` to inspect the composed tree.
+4. Call-card test: set `callMode: card`, call again — a ringing card (pulse animation + caller identity) floats up bottom-right; accepting flips it to "connected" and playback starts;
+5. For config debugging, run `dsh --profile web --dump-config` to inspect the composed tree.
 
 ### 8. Platform differences
 
@@ -253,7 +260,8 @@ dsh web
 | Playback | Windows: built-in `SoundPlayer` (verified). macOS: `afplay`. Linux: `aplay` (install ALSA utils). `edge-tts` synthesizes only — use a local wav backend for audible output. |
 | Recording | macOS only (native + ffmpeg). Windows/Linux `transcribe({record})` reports unavailability cleanly. |
 | Shell sandbox | Local engine commands run with an explicit `danger-full-access` policy — the engine binaries, GGUF models, and audio dir span roots no confined sandbox mode covers. **Evaluate this trust boundary before deploying.** |
-| Tests | 76 unit tests, all green (`pnpm test`). |
+| Call card | v0.2 rides the webserver route seam (SSE `/voice/call/events` + `POST /voice/call/answer`; the body is the reserved `VoiceAnswerPayload` contract verbatim). Web composition only — headless falls back to the modal/refusal. Same-origin trust level as the audio route. |
+| Tests | 87 unit tests, all green (`pnpm test`). |
 
 ## 🛠 Development
 
@@ -267,7 +275,7 @@ pnpm test        # node --test
 ## 🗺 Roadmap
 
 - **v0.1** ✅ published on npm (0.1.0): call domain + crispasr backend + local playback.
-- **v0.2** — a dedicated call-card UI (ring animation, caller identity) behind the reserved RPC seam (`src/rpc/contract.ts`).
+- **v0.2** ✅ dedicated call-card UI (ring animation, caller identity) — `callMode: card`, riding the webserver route seam with payloads identical to the reserved RPC contract (`src/rpc/contract.ts`), ready to migrate onto a real connection-RPC later.
 - **v0.3** — voicemail for missed calls + AI read receipts (`src/domain/voicemail.ts`, reserved event types).
 - **v1.0** — freeze the schema, ship the stable release.
 

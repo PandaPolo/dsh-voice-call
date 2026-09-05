@@ -38,13 +38,21 @@ export interface CrispasrEngineConfig {
 /**
  * Ring/answer behaviour for `offer_call`. `ask` routes the call through the
  * human confirmation channel (the light-weight v0.1 answer: the built-in
- * user-questions prompt). `direct` accepts immediately (no ring) for
- * already-confirmed narration. `off` refuses calls outright.
- *
- * FUTURE (v0.2+): the ring may carry a timeout, a caller identity, and a
- * custom call-card UI; those fields belong here when they land.
+ * user-questions prompt). `card` (v0.2) rings the dedicated call-card UI —
+ * ring animation, caller identity, 接听/拒接 buttons — falling back to the
+ * `ask` prompt when no call-card client is connected. `direct` accepts
+ * immediately (no ring) for already-confirmed narration. `off` refuses calls
+ * outright.
  */
-export type CallMode = 'ask' | 'direct' | 'off';
+export type CallMode = 'ask' | 'card' | 'direct' | 'off';
+
+/** The call-card presentation config (v0.2). */
+export interface CallCardConfig {
+  /** Display name shown on the card as the caller. @default 'DeepSeek' */
+  readonly callerName: string;
+  /** How long the card rings before the call settles as `missed`. @default 30000 */
+  readonly ringTimeoutMs: number;
+}
 
 /** Plugin config as resolved by {@link resolveConfig} (defaults applied). */
 export interface VoiceConfig {
@@ -97,10 +105,12 @@ export interface VoiceConfig {
    */
   readonly durableEvents: boolean;
   /**
-   * How `offer_call` rings the human: `ask` (default), `direct`, or `off`.
-   * This is the v0.1 "answer key" — the human always holds it.
+   * How `offer_call` rings the human: `ask` (default), `card`, `direct`, or
+   * `off`. This is the v0.1 "answer key" — the human always holds it.
    */
   readonly callMode: CallMode;
+  /** The call-card presentation (only used when callMode is `card`). */
+  readonly callCard: CallCardConfig;
   /** Audio artifact root; defaults to `~/.dsh/voice` (or `$DSH_HOME/voice`). */
   readonly audioDir: string;
   /**
@@ -138,6 +148,7 @@ export interface VoiceConfigInput {
   readonly readReplies?: boolean;
   readonly durableEvents?: boolean;
   readonly callMode?: CallMode;
+  readonly callCard?: { readonly callerName?: string; readonly ringTimeoutMs?: number };
   readonly audioDir?: string;
   readonly voicemail?: { readonly enabled?: boolean };
   readonly readReceipts?: { readonly enabled?: boolean };
@@ -165,6 +176,10 @@ export function resolveConfig(raw: VoiceConfigInput | undefined): VoiceConfig {
     readReplies: raw?.readReplies ?? false,
     durableEvents: raw?.durableEvents ?? false,
     callMode: raw?.callMode ?? 'ask',
+    callCard: {
+      callerName: raw?.callCard?.callerName ?? 'DeepSeek',
+      ringTimeoutMs: raw?.callCard?.ringTimeoutMs ?? 30_000,
+    },
     audioDir: raw?.audioDir ?? '',
     ...(raw?.voicemail !== undefined ? { voicemail: raw.voicemail } : {}),
     ...(raw?.readReceipts !== undefined ? { readReceipts: raw.readReceipts } : {}),

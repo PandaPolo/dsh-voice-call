@@ -35,7 +35,10 @@ export function personaText(callMode: CallMode): string {
         '- Speak when it matters: a finished thought, a milestone reached, a feeling worth saying aloud.',
         '- Use offer_call sparingly and with intent; routine updates belong in text. You may choose a voice (aiden, dylan, eric, ono_anna, ryan, serena, sohee, uncle_fu, vivian).',
       ].join('\n');
+    // The call-card presentation is invisible to the agent: the human still
+    // answers 接听/拒接/稍后再说, just on the v0.2 card instead of the prompt.
     case 'ask':
+    case 'card':
     default:
       return [
         '## Your voice',

@@ -14,7 +14,9 @@
  * - `speak({ text, voice?, rate? })` — direct TTS on a background job
  *   (from dsh-voice; the crispasr backend is the local default here).
  * - `readReplies` + `/voice` — per-session narration toggle.
- * - `callMode: ask | direct | off` — how calls ring the human.
+ * - `callMode: ask | card | direct | off` — how calls ring the human; `card`
+ *   rings the v0.2 call-card UI (ring animation, caller identity) over the
+ *   `/voice/call` web routes, with the v0.1 prompt as its fallback.
  *
  * Upgrade-ready contracts (reserved, not implemented in v0.1):
  * `src/rpc/contract.ts` (call-card UI endpoints), `src/domain/voicemail.ts`
@@ -36,8 +38,11 @@ import type {} from '@deepseek-ai/dsh-tools';
 import type {} from '@deepseek-ai/dsh-user-questions';
 import z from '@deepseek-ai/schemastery';
 import { AudioStore, resolveAudioDir } from './audio.ts';
+import { CallBoard } from './callcard/board.ts';
+import { installCallCardRoutes } from './callcard/web.ts';
 import { createRecordFn, createSttBackend, createTtsBackend } from './backends/index.ts';
 import { AskUserRingChannel, DirectRingChannel, type RingChannel } from './channels/ring.ts';
+import { CallCardRingChannel } from './channels/callcard.ts';
 import { registerVoiceCommand } from './command.ts';
 import { installVoicePersona } from './persona.ts';
 import { installReadReplies, ReadRepliesToggle } from './read-replies.ts';
@@ -83,7 +88,11 @@ export const Config = z.object({
   // without plugin-event support (rc.6 refuses unknown event types on history
   // load — an appended voice/* event poisons the session log).
   durableEvents: z.boolean().default(false),
-  callMode: z.union(['ask', 'direct', 'off']).default('ask'),
+  callMode: z.union(['ask', 'card', 'direct', 'off']).default('ask'),
+  callCard: z.object({
+    callerName: z.string(),
+    ringTimeoutMs: z.number().min(1000).max(600_000),
+  }),
   audioDir: z.string(),
   // Reserved for v0.3 — accepted now so configs written against v0.1 keep loading.
   voicemail: z.object({ enabled: z.boolean() }),
@@ -97,15 +106,30 @@ export function apply(ctx: Context, rawConfig: VoiceConfigInput): void {
 
   // Audio store: plain files under audioDir; the log carries refs only.
   let audioRoot = resolveAudioDir(current().audioDir);
+  // The call-card board: the host half of the v0.2 card UI. The web routes
+  // stream its state to connected clients; with no webserver (headless) it
+  // simply never gains subscribers and the card channel falls back to the
+  // v0.1 prompt channel.
+  const callBoard = new CallBoard();
   let disposeRoute: (() => void) | undefined;
   const mountRoute = (): void => {
     disposeRoute?.();
     disposeRoute = installAudioRoute(ctx, audioRoot);
   };
-  mountRoute();
+  // Web routes mount via ctx.inject: the webserver fiber boots in parallel
+  // with this plugin, so a plain ctx.get('webServer') in apply() races and
+  // silently registers nothing (the harness's own web-app waits the same
+  // way). In headless compositions the service never appears and the
+  // callback simply never fires.
+  let routesReady = false;
+  ctx.inject(['webServer'], () => {
+    routesReady = true;
+    mountRoute();
+    installCallCardRoutes(ctx, callBoard);
+  });
   current = installVoiceSettings(ctx, rawConfig, () => {
     audioRoot = resolveAudioDir(current().audioDir);
-    mountRoute();
+    if (routesReady) mountRoute();
   });
   const audioStore = (): AudioStore => new AudioStore(audioRoot);
   const audioPath = (): string => audioStore().pathFor(`voice-speak-${speakSeq()}`, 'wav');
@@ -140,15 +164,25 @@ export function apply(ctx: Context, rawConfig: VoiceConfigInput): void {
   });
 
   // The call domain: the ring channel follows callMode (ask → human prompt,
+  // card → the v0.2 call-card UI with the v0.1 prompt as fallback,
   // direct → immediate accept; off → refused).
+  const askChannel = (): RingChannel => new AskUserRingChannel((request) => ctx.userQuestions.ask({
+    questions: request.questions,
+    ...(request.agent !== undefined ? { agent: request.agent } : {}),
+    ...(request.signal !== undefined ? { signal: request.signal } : {}),
+  }));
   const ringChannel = (): RingChannel => {
     const mode = current().callMode;
     if (mode === 'direct') return new DirectRingChannel();
-    return new AskUserRingChannel((request) => ctx.userQuestions.ask({
-      questions: request.questions,
-      ...(request.agent !== undefined ? { agent: request.agent } : {}),
-      ...(request.signal !== undefined ? { signal: request.signal } : {}),
-    }));
+    if (mode === 'card') {
+      return new CallCardRingChannel({
+        board: callBoard,
+        callerName: () => current().callCard.callerName,
+        ringTimeoutMs: () => current().callCard.ringTimeoutMs,
+        fallback: askChannel(),
+      });
+    }
+    return askChannel();
   };
 
   applyOfferCallTool(ctx, {

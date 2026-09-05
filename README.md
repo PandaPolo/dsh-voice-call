@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/harness-0.1.2--rc.1-5b5bd6" alt="DSH 0.1.2-rc.1" />
-  <img src="https://img.shields.io/badge/tests-76%20green-1f883d" alt="76 个测试全绿" />
+  <img src="https://img.shields.io/badge/tests-87%20green-1f883d" alt="87 个测试全绿" />
 </p>
 
 <p align="center">
@@ -65,23 +65,24 @@ agent 选择对世界说出的第一句话是：
 ## 🌹 理念
 
 - **agent 拥有拨号权**：它在自己觉得值得说的时候调用 `offer_call`——一个完成的念头、一个里程碑、一句想大声说出来的话。
-- **人类拥有接听权**：来电以弹窗呈现（接听 / 拒接 / 稍后再说），未经同意绝不播放任何声音。
+- **人类拥有接听权**：来电以弹窗或专属来电卡片呈现（接听 / 拒接 / 稍后再说），未经同意绝不播放任何声音。
 - **拒接也是教育**：来电被拒接或推迟时，工具会把决定返回给 agent，它学会改用文字写下来——或者只在真正重要时再试一次。
 
 ## ✨ 功能
 
 - `offer_call({ text, voice? })` —— 通话域：振铃 → 人类应答 → 接听则后台任务合成并播放；拒接/推迟则把决定返回给 agent。
+- **专属来电卡片（v0.2）** —— `callMode: card` 时来电以浮层卡片振铃：双环脉冲动画、来电者身份（名字 + 会话尾号 + 音色徽章）、想说的话预览、超时自动判 `missed`；无网页客户端连接时自动回落到弹窗询问。
 - `speak({ text, voice?, rate? })` —— 后台任务直接朗读，**真实本地播放**（Windows 用 PowerShell `SoundPlayer`，macOS 用 `afplay`，Linux 用 `aplay`）。
 - `transcribe({ source, to? })` —— 语音转文字成为用户消息（whisper-local / openai / macOS 原生）；`to` 可跨会话投递（需 dsh-crosstalk）。
 - `/voice` 命令 —— 状态查询、`on|off` 朗读开关、`speak <text>` 直接说话。
 - **9 个 CustomVoice 音色**，含 2 个中文方言：`aiden` · `dylan`（北京话）· `eric`（四川话）· `ono_anna` · `ryan` · `serena` · `sohee` · `uncle_fu` · `vivian`。
 - **durableEvents 开关** —— 会话事件日志默认关闭（见"兼容性"），保证 rc.6 下会话历史可继续加载。
-- **已发布 npm**：`dsh-voice-call@0.1.0` 可直接安装。
+- **已发布 npm**：`dsh-voice-call@0.2.0` 可直接安装。
 
 ## 🚀 快速开始
 
 ```bash
-# 1) 安装插件（从 npm 安装 0.1.0）
+# 1) 安装插件（从 npm 安装 0.2.0）
 dsh plugin --profile web add dsh-voice-call
 
 # 2) 在 profile 的 cordis.patch.yml 中按 id 更新配置（引擎路径等，见下方"环境部署"）
@@ -173,7 +174,10 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
         bin: D:\crispasr\crispasr.exe                          # 引擎可执行文件（绝对路径）
         model: D:\crispasr\models\qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf
         codec: D:\crispasr\models\qwen3-tts-tokenizer-12hz-q8_0.gguf
-    callMode: ask              # ask（弹窗询问）| direct（直接接听）| off（拒绝来电）
+    callMode: card             # card（专属来电卡片）| ask（弹窗询问）| direct（直接接听）| off（拒绝来电）
+    callCard:                  # v0.2 来电卡片外观与振铃行为（callMode: card 时生效）
+      callerName: DeepSeek     # 卡片上显示的来电者名字
+      ringTimeoutMs: 30000     # 振铃超时；超时来电记为 missed（不无限挂起 agent）
     readReplies: false         # 朗读回复开关（也可在会话里 /voice on 临时开启）
     durableEvents: false       # rc.6 上必须保持 false（见"兼容性"）
     audioDir: ~/.dsh/voice     # 音频文件目录
@@ -191,7 +195,9 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
 | `tts.rate` | 1–600 | 语速（词/分钟） |
 | `tts.crispasr` | `bin` / `model` / `codec` | 引擎与两个 GGUF 模型的**绝对路径** |
 | `stt.backend` | `whisper-local` / `openai` / `macos` / `fake` | 留空自动探测 |
-| `callMode` | `ask` / `direct` / `off` | 来电方式：询问 / 直接接听 / 关闭 |
+| `callMode` | `card` / `ask` / `direct` / `off` | 来电方式：专属卡片 / 弹窗询问 / 直接接听 / 关闭 |
+| `callCard.callerName` | 任意名字 | 来电卡片显示的来电者名字，默认 `DeepSeek` |
+| `callCard.ringTimeoutMs` | 1000–600000 | 振铃超时（毫秒），默认 30000；超时记为 `missed` |
 | `readReplies` | `true` / `false` | 朗读回复，默认 `false` |
 | `durableEvents` | `true` / `false` | rc.6 必须 `false` |
 | `audioDir` | 路径 | 音频保存目录，默认 `~/.dsh/voice` |
@@ -209,7 +215,8 @@ dsh web
 1. 打开一个会话，输入 `/voice` —— 应显示 `stt: … · tts: crispasr · readReplies: off` 以及 `audioDir: …`；
 2. 让 agent 说一句："用 `speak` 工具说'你好'。" —— 听到声音即成功；
 3. 完整通话测试："你有 `offer_call` 工具——有什么值得说的就打电话给我。" 点 **接听**，声音从扬声器播出；
-4. 排查配置时可执行 `dsh --profile web --dump-config` 查看合成后的完整配置树。
+4. 来电卡片测试：配置 `callMode: card` 后重拨一次——右下角浮出振铃卡片（脉冲动画 + 来电者身份），点 **接听** 后卡片转为"已接听"并开始播放；
+5. 排查配置时可执行 `dsh --profile web --dump-config` 查看合成后的完整配置树。
 
 ### 8️⃣ 平台差异
 
@@ -249,7 +256,8 @@ dsh web
 | 播放 | Windows：内置 `SoundPlayer`（已实测）。macOS：`afplay`。Linux：`aplay`（需安装 ALSA 工具）。`edge-tts` 只合成不播放——要听到声音请用本地 wav 后端。 |
 | 录音 | 仅 macOS（原生 + ffmpeg）。Windows/Linux 的 `transcribe({record})` 会明确提示不可用。 |
 | Shell 沙箱 | 本地引擎命令以显式 `danger-full-access` 策略运行——引擎二进制、GGUF 模型、音频目录跨越了受限沙箱模式无法覆盖的多个根。**部署前请评估此信任边界。** |
-| 测试 | 76 个单元测试全绿（`pnpm test`）。 |
+| 来电卡片 | v0.2 走 webserver 路由缝隙（SSE `/voice/call/events` + `POST /voice/call/answer`，载荷即预留的 `VoiceAnswerPayload` 契约）；仅 web 组合可用，headless 自动回落弹窗/拒接。同源信任级别与音频路由一致。 |
+| 测试 | 87 个单元测试全绿（`pnpm test`）。 |
 
 ## 🛠 开发
 
@@ -263,7 +271,7 @@ pnpm test        # node --test
 ## 🗺 路线图
 
 - **v0.1** ✅ 已发布 npm（0.1.0）：通话域 + crispasr 后端 + 本地播放。
-- **v0.2** —— 专属来电卡片 UI（振铃动画、来电者身份），走已预留的 RPC 缝隙（`src/rpc/contract.ts`）。
+- **v0.2** ✅ 专属来电卡片 UI（振铃动画、来电者身份）——`callMode: card`，走 webserver 路由缝隙，载荷与预留的 RPC 契约（`src/rpc/contract.ts`）逐字一致，未来可平移到真正的 connection-RPC。
 - **v0.3** —— 错过来电的语音信箱 + AI 已读回执（`src/domain/voicemail.ts`，事件类型已预留）。
 - **v1.0** —— 冻结 schema，发布稳定版。
 

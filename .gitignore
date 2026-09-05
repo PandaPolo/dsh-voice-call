@@ -7,3 +7,6 @@ lib/
 .dsh/
 .dsh-home/
 .pnpm-store/
+
+# Local verification artifacts (screenshots, boot logs, profile snapshots)
+.verify-backup/
