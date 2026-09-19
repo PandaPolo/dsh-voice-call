@@ -8,8 +8,8 @@
   <a href="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml"><img src="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/harness-0.1.2--rc.1-5b5bd6" alt="DSH 0.1.2-rc.1" />
-  <img src="https://img.shields.io/badge/tests-87%20green-1f883d" alt="87 tests green" />
+  <img src="https://img.shields.io/badge/harness-0.1.5--rc.2-5b5bd6" alt="DSH 0.1.5-rc.2" />
+  <img src="https://img.shields.io/badge/tests-95%20green-1f883d" alt="95 tests green" />
 </p>
 
 <p align="center">
@@ -81,12 +81,12 @@ If you fork, improve, or build on this project, please keep this note — it is 
 - `/voice` command — status, `on|off` narration toggle, `speak <text>`.
 - **9 CustomVoice speakers** including two Chinese dialects: `aiden` · `dylan` (Beijing) · `eric` (Sichuan) · `ono_anna` · `ryan` · `serena` · `sohee` · `uncle_fu` · `vivian`.
 - **durableEvents gate** — session-event logging is off by default (see Compatibility), so sessions stay resumable on rc.6.
-- **Published on npm**: install `dsh-voice-call@0.2.0` directly.
+- **Published on npm**: install `dsh-voice-call@0.3.0` directly.
 
 ## 🚀 Quick start
 
 ```bash
-# 1) install the plugin (from npm, v0.2.0)
+# 1) install the plugin (from npm, v0.3.0)
 dsh plugin --profile web add dsh-voice-call
 
 # 2) update the row by id in your profile's cordis.patch.yml (engine paths etc. — see "Local deployment" below)
@@ -105,7 +105,7 @@ Accept the ring, and the agent's voice plays on your speakers. For the full setu
 | Platform | Windows 10/11 · macOS · Linux |
 | Node.js | **≥ 20** (plugin runtime); tests need 22.18+ (Node's native TS type-stripping) |
 | pnpm | 9+ (CI uses pnpm 11) |
-| dsh CLI | `@deepseek-ai/dsh`, currently 0.1.2-rc.1 |
+| dsh CLI | `@deepseek-ai/dsh`, currently 0.1.5-rc.2 |
 | Local voice engine | CrispASR ≥ 0.8.28 + Qwen3-TTS GGUF models (recommended — without it there is no local synthesis) |
 | LLM provider | a working API credential for dsh (the agent itself depends on it) |
 
@@ -113,7 +113,7 @@ Accept the ring, and the agent's voice plays on your speakers. For the full setu
 
 ```bash
 npm install -g @deepseek-ai/dsh
-dsh --version    # expect 0.1.2-rc.1
+dsh --version    # expect 0.1.5-rc.2
 ```
 
 - Make sure your model-provider credential is configured (dsh needs an API key to run an agent).
@@ -125,7 +125,7 @@ dsh --version    # expect 0.1.2-rc.1
 dsh plugin --profile web add dsh-voice-call
 ```
 
-- This installs the published `dsh-voice-call@0.1.0` from npm.
+- This installs the published `dsh-voice-call` from npm (the version badge is the current npm latest).
 - Installing from a local checkout: `dsh plugin --profile web add D:\path\to\dsh-voice-call` (point at the repo).
 - To verify, run `dsh --profile web --dump-config` — the composed tree should include the plugin.
 
@@ -255,13 +255,13 @@ dsh web
 
 | Area | Status |
 |---|---|
-| Harness | 0.1.2-rc.1 (peerDependencies declared as `^0.1.2-rc.1`; since 0.1.2 the client node engine lives in `dsh-client-ui-conversation`/`dsh-client-ui-chat`, no longer `dsh-client-runtime`). The plugin lives on the host plane; background jobs must carry `owner: agent` because the Web composition disables host-plane `tool-jobs`. |
-| Session events | 0.1.2-rc.1 introduced the `SessionEvent.ignorable` envelope marker as the external-event compatibility mechanism, but `Session.append` still gives plugin events no way to set it and this plugin has not migrated to that path. `durableEvents` stays `false` by default; keep it off until plugin-event persistence is verified. |
+| Harness | 0.1.5-rc.2 (peerDependencies declared as `^0.1.5-rc.2`; since 0.1.2 the client node engine lives in `dsh-client-ui-conversation`/`dsh-client-ui-chat`, no longer `dsh-client-runtime`). The plugin lives on the host plane; background jobs must carry `owner: agent` because the Web composition disables host-plane `tool-jobs` — still enforced in 0.1.5-rc.2. |
+| Session events | `SessionEvent.ignorable` is the external-event compatibility mechanism, but `Session.append` still gives plugin events no way to set it, and 0.1.5-rc.2's persistence read path refuses the whole log on an unknown, unmarked event (`SESSION_FORMAT_VERSION` has moved 0 → 3, with a generated built-in event catalog alongside). `durableEvents` stays `false` by default; keep it off until plugin-event persistence is verified. |
 | Playback | Windows: built-in `SoundPlayer` (verified). macOS: `afplay`. Linux: `aplay` (install ALSA utils). `edge-tts` synthesizes only — use a local wav backend for audible output. |
 | Recording | macOS only (native + ffmpeg). Windows/Linux `transcribe({record})` reports unavailability cleanly. |
 | Shell sandbox | Local engine commands run with an explicit `danger-full-access` policy — the engine binaries, GGUF models, and audio dir span roots no confined sandbox mode covers. **Evaluate this trust boundary before deploying.** |
 | Call card | v0.2 rides the webserver route seam (SSE `/voice/call/events` + `POST /voice/call/answer`; the body is the reserved `VoiceAnswerPayload` contract verbatim). Web composition only — headless falls back to the modal/refusal. Same-origin trust level as the audio route. |
-| Tests | 87 unit tests, all green (`pnpm test`). |
+| Tests | 95 unit tests, all green (`pnpm test`). |
 
 ## 🛠 Development
 

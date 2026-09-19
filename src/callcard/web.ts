@@ -3,10 +3,10 @@
  * registered on `ctx.webServer` exactly like the audio route. Three endpoints
  * under the `/voice/call` prefix:
  *
- * - `GET /voice/call/events` — the ring stream (SSE). On connect the current
- *   ringing table is replayed, then `ringing` / `settled` events follow. A
- *   heartbeat comment keeps idle proxies from closing the stream.
- * - `GET /voice/call/state` — the ringing table as plain JSON (a client that
+ * - `GET /voice/call/events` — the call stream (SSE). On connect the current
+ *   live table is replayed, then `ringing` / `active` / `settled` events
+ *   follow. A heartbeat comment keeps idle proxies from closing the stream.
+ * - `GET /voice/call/state` — the live table as plain JSON (a client that
  *   cannot hold an EventSource can poll this instead).
  * - `POST /voice/call/answer` — the human's answer. The body is the reserved
  *   `VoiceAnswerPayload` contract verbatim; the response is `VoiceAnswerResult`.
@@ -25,6 +25,7 @@ export const CALL_ROUTE = '/voice/call';
 
 /** The SSE event names the client subscribes to. */
 export const RINGING_EVENT = 'ringing' as const;
+export const ACTIVE_EVENT = 'active' as const;
 export const SETTLED_EVENT = 'settled' as const;
 
 /** Heartbeat interval for the SSE stream (ms). */
@@ -97,8 +98,8 @@ function serveEventStream(board: CallBoard, req: IncomingMessage, res: ServerRes
     }
   };
   const unsubscribe = board.subscribe((event) => {
-    if (event.kind === 'ringing') send(RINGING_EVENT, event.call);
-    else send(SETTLED_EVENT, event.call);
+    if (event.kind === 'settled') send(SETTLED_EVENT, event.call);
+    else send(event.kind === 'active' ? ACTIVE_EVENT : RINGING_EVENT, event.call);
   });
   const heartbeat = setInterval(() => {
     try {

@@ -14,7 +14,7 @@
  */
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions';
-import type { CallDecision, VoiceCall } from '../domain/call.ts';
+import type { CallDecision, CallLegStatus, VoiceCall } from '../domain/call.ts';
 
 /** What the ring produced: the human's decision, or a refusal. */
 export type RingOutcome =
@@ -34,7 +34,25 @@ export interface RingRequest {
 export interface RingChannel {
   /** Present one call to the human and wait for their answer. */
   ring(request: RingRequest): Promise<RingOutcome>;
+  /**
+   * Report the follow-up of an ACCEPTED call back into the presentation, so a
+   * channel with an on-screen call surface can keep it up while the agent
+   * speaks and retire it when the audio is done. Channels without one (the
+   * prompt and direct channels) omit this and the caller uses {@link SILENT_LEG}.
+   */
+  leg?(callId: string): CallLeg;
 }
+
+/** The follow-up reporting seam for one accepted call (see {@link RingChannel.leg}). */
+export interface CallLeg {
+  /** The wav is synthesized and playback started (vs still being synthesized). */
+  playing(): void;
+  /** The call is over: the agent finished speaking, or the speak job failed. */
+  settle(status: CallLegStatus, reason?: string): void;
+}
+
+/** The leg of a presentation with nothing to keep on screen. */
+export const SILENT_LEG: CallLeg = { playing: () => {}, settle: () => {} };
 
 /**
  * The v0.1 ring: the built-in user-questions prompt. Three options — 接听

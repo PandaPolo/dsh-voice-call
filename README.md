@@ -8,8 +8,8 @@
   <a href="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml"><img src="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/harness-0.1.2--rc.1-5b5bd6" alt="DSH 0.1.2-rc.1" />
-  <img src="https://img.shields.io/badge/tests-87%20green-1f883d" alt="87 个测试全绿" />
+  <img src="https://img.shields.io/badge/harness-0.1.5--rc.2-5b5bd6" alt="DSH 0.1.5-rc.2" />
+  <img src="https://img.shields.io/badge/tests-95%20green-1f883d" alt="95 个测试全绿" />
 </p>
 
 <p align="center">
@@ -77,12 +77,12 @@ agent 选择对世界说出的第一句话是：
 - `/voice` 命令 —— 状态查询、`on|off` 朗读开关、`speak <text>` 直接说话。
 - **9 个 CustomVoice 音色**，含 2 个中文方言：`aiden` · `dylan`（北京话）· `eric`（四川话）· `ono_anna` · `ryan` · `serena` · `sohee` · `uncle_fu` · `vivian`。
 - **durableEvents 开关** —— 会话事件日志默认关闭（见"兼容性"），保证 rc.6 下会话历史可继续加载。
-- **已发布 npm**：`dsh-voice-call@0.2.0` 可直接安装。
+- **已发布 npm**：`dsh-voice-call@0.3.0` 可直接安装。
 
 ## 🚀 快速开始
 
 ```bash
-# 1) 安装插件（从 npm 安装 0.2.0）
+# 1) 安装插件（从 npm 安装 0.3.0）
 dsh plugin --profile web add dsh-voice-call
 
 # 2) 在 profile 的 cordis.patch.yml 中按 id 更新配置（引擎路径等，见下方"环境部署"）
@@ -101,7 +101,7 @@ dsh plugin --profile web add dsh-voice-call
 | 平台 | Windows 10/11 · macOS · Linux |
 | Node.js | **≥ 20**（插件运行要求）；运行测试需要 22.18+（Node 原生 TS 类型剥离） |
 | pnpm | 9+（CI 使用 pnpm 11） |
-| dsh CLI | `@deepseek-ai/dsh`，当前 0.1.2-rc.1 |
+| dsh CLI | `@deepseek-ai/dsh`，当前 0.1.5-rc.2 |
 | 本地语音引擎 | CrispASR ≥ 0.8.28 + Qwen3-TTS GGUF 模型（推荐，否则没有本地合成音色） |
 | 模型提供商 | dsh 需要已配置可用的 LLM API 凭据（agent 本身依赖） |
 
@@ -109,7 +109,7 @@ dsh plugin --profile web add dsh-voice-call
 
 ```bash
 npm install -g @deepseek-ai/dsh
-dsh --version    # 期望输出 0.1.2-rc.1
+dsh --version    # 期望输出 0.1.5-rc.2
 ```
 
 - 确认模型提供商凭据已配置（dsh 跑 agent 需要 API key）。
@@ -121,7 +121,7 @@ dsh --version    # 期望输出 0.1.2-rc.1
 dsh plugin --profile web add dsh-voice-call
 ```
 
-- 以上命令从 npm 安装已发布的 `dsh-voice-call@0.1.0`。
+- 以上命令从 npm 安装已发布的 `dsh-voice-call`（版本徽章即当前 npm latest）。
 - 本地开发、从源码安装：`dsh plugin --profile web add D:\path\to\dsh-voice-call`（指向仓库路径）。
 - 安装后可执行 `dsh --profile web --dump-config` 查看合成后的完整配置树，确认插件已进入。
 
@@ -251,13 +251,13 @@ dsh web
 
 | 方面 | 状态 |
 |---|---|
-| harness | 0.1.2-rc.1（peerDependencies 声明 `^0.1.2-rc.1`；0.1.2 起客户端节点引擎并入 `dsh-client-ui-conversation`/`dsh-client-ui-chat`，不再依赖 `dsh-client-runtime`）。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 Web 组合禁用了 host 平面的 `tool-jobs`。 |
-| 会话事件 | 0.1.2-rc.1 引入了 `SessionEvent.ignorable` 信封标记作为外部事件兼容机制，但 `Session.append` 仍不允许插件事件自行标记，本插件也未迁移该路径。`durableEvents` 保持默认 `false`；在插件事件持久化验证通过之前请勿开启。 |
+| harness | 0.1.5-rc.2（peerDependencies 声明 `^0.1.5-rc.2`；0.1.2 起客户端节点引擎并入 `dsh-client-ui-conversation`/`dsh-client-ui-chat`，不再依赖 `dsh-client-runtime`）。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 Web 组合禁用了 host 平面的 `tool-jobs`（0.1.5-rc.2 里这条约束仍然生效）。 |
+| 会话事件 | `SessionEvent.ignorable` 是外部事件的兼容机制，但 `Session.append` 仍不给插件事件写入它的入口。0.1.5-rc.2 的持久化读路径遇到「未知且未标 `ignorable`」的事件会直接拒绝整份日志（`SESSION_FORMAT_VERSION` 已由 0 进到 3，并新增了内置事件类型清单）。`durableEvents` 保持默认 `false`；在插件事件持久化验证通过之前请勿开启。 |
 | 播放 | Windows：内置 `SoundPlayer`（已实测）。macOS：`afplay`。Linux：`aplay`（需安装 ALSA 工具）。`edge-tts` 只合成不播放——要听到声音请用本地 wav 后端。 |
 | 录音 | 仅 macOS（原生 + ffmpeg）。Windows/Linux 的 `transcribe({record})` 会明确提示不可用。 |
 | Shell 沙箱 | 本地引擎命令以显式 `danger-full-access` 策略运行——引擎二进制、GGUF 模型、音频目录跨越了受限沙箱模式无法覆盖的多个根。**部署前请评估此信任边界。** |
 | 来电卡片 | v0.2 走 webserver 路由缝隙（SSE `/voice/call/events` + `POST /voice/call/answer`，载荷即预留的 `VoiceAnswerPayload` 契约）；仅 web 组合可用，headless 自动回落弹窗/拒接。同源信任级别与音频路由一致。 |
-| 测试 | 87 个单元测试全绿（`pnpm test`）。 |
+| 测试 | 95 个单元测试全绿（`pnpm test`）。 |
 
 ## 🛠 开发
 

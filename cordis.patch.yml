@@ -22,8 +22,10 @@
         stt: {}
         tts: {}
         readReplies: false
-        # Voice session-log events stay OFF by default: rc.6 has no plugin-event
-        # registration surface, so a voice/* event poisons history loading.
+        # Voice session-log events stay OFF by default: the persistence reader
+        # refuses a log carrying an event type it does not know unless that event
+        # is marked SessionEvent.ignorable, and Session.append offers plugin
+        # events no way to set it — so a voice/* event poisons history loading.
         durableEvents: false
         callMode: ask
         audioDir: ~/.dsh/voice

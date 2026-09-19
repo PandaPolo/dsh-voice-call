@@ -8,13 +8,14 @@
  * Pipeline per call:
  *
  *   open call (callId) → ring (channel by callMode) → settle
- *     accepted → speak job (synthesize + note + play)
+ *     accepted → speak job (synthesize + note + play), reported back onto the
+ *                ring channel's leg so the card retires when the audio is done
  *     rejected / later → return the decision to the agent
  *     off / unavailable → refuse with a reason
  *
  * The ring is synchronous (the human answers while the tool call is pending);
  * the synthesis runs on a background job exactly like `speak`, so an accepted
- * call never blocks the turn.
+ * call never blocks the turn — and the card outlives the tool call with it.
  *
  * @module dsh-voice-call/tools/offer-call
  */
@@ -25,10 +26,18 @@ import { defineTool, type GenericCallView } from '@deepseek-ai/dsh-tools';
 import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions';
 import type { CallMode } from '../types.ts';
 import type { OfferCallOutput, VoiceCallData } from '../types.ts';
-import type { RingChannel } from '../channels/ring.ts';
+import { SILENT_LEG, type RingChannel } from '../channels/ring.ts';
 import { answerCall, openCall, refuseCall, type VoiceCall } from '../domain/call.ts';
 import { appendVoiceCall } from '../events/call.ts';
 import { startSpeakJob, type SpeakDeps } from './speak.ts';
+
+/**
+ * How long an accepted call's card may wait for its speak job before the
+ * pipeline gives up on it (ms). Generous on purpose: synthesis is ~0.2× real
+ * time but playback runs at 1×, so a long message is a long leg. This only
+ * catches a wedged TTS process.
+ */
+const SPEAK_LEG_CAP_MS = 300_000;
 
 /** Everything the offer-call pipeline needs; injected so tests run with fakes. */
 export interface OfferCallDeps {
@@ -83,7 +92,23 @@ export async function runOfferCall(deps: OfferCallDeps, input: OfferCallArgs): P
 
   switch (outcome.decision) {
     case 'accepted': {
-      const started = startSpeakJob(deps.speak, { text: call.text, voice: call.voice === 'default' ? undefined : call.voice });
+      // The human's side of the call is not over when they answer: the audio
+      // still has to be synthesized and played. The card stays up until the job
+      // settles the leg, so pressing 接听 is never a dead button.
+      const leg = deps.ring.leg?.(call.callId) ?? SILENT_LEG;
+      const started = startSpeakJob(deps.speak, {
+        text: call.text,
+        voice: call.voice === 'default' ? undefined : call.voice,
+        onPlay: leg.playing,
+      });
+      // A speak job that wedges (a TTS process that never exits) would
+      // otherwise leave the card on screen forever.
+      const cap = setTimeout(() => leg.settle('failed', `语音任务超过 ${SPEAK_LEG_CAP_MS / 60_000} 分钟未结束`), SPEAK_LEG_CAP_MS);
+      started.settled.then((job) => {
+        clearTimeout(cap);
+        if (job.status === 'completed') leg.settle('finished');
+        else leg.settle('failed', job.detail);
+      });
       return { status: 'accepted', callId: settled.callId, jobId: started.jobId, audioRef: started.audioRef, backend: deps.speak.tts.id };
     }
     case 'rejected':

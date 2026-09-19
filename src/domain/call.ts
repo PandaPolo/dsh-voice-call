@@ -25,6 +25,13 @@ export type CallDecision = 'accepted' | 'rejected' | 'later' | 'missed';
 /** Why the ring never happened (or could not be answered). */
 export type CallRefusal = 'off' | 'unavailable';
 
+/**
+ * How an accepted call's spoken leg ended. The call is not over when the human
+ * presses 接听 — the audio still has to be synthesized and played — so the
+ * presentation keeps the call on screen until it settles with one of these.
+ */
+export type CallLegStatus = 'finished' | 'failed';
+
 /** The state of one call, from the agent's perspective. */
 export interface VoiceCall {
   /** Stable call id. */

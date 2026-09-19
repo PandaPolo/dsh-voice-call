@@ -9,8 +9,9 @@
  * - `RPC_VOICE_ANSWER` (`voice/answer`) → `POST /voice/call/answer`, body
  *   `VoiceAnswerPayload`, response `VoiceAnswerResult`.
  * - The host→card direction (the ring itself) streams as SSE on
- *   `GET /voice/call/events` (`ringing` / `settled` events carrying
- *   `CallCardRingState` / `CallCardSettledState`), with `GET /voice/call/state`
+ *   `GET /voice/call/events` (`ringing` / `active` / `settled` events carrying
+ *   `CallCardRingState` / `CallCardSettledState`; `active` marks an accepted
+ *   call whose spoken leg is still running), with `GET /voice/call/state`
  *   as the polling equivalent.
  *
  * When a harness build gains a real connection-RPC surface, these endpoints

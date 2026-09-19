@@ -54,7 +54,13 @@ export interface SpeakArgs {
 /** Start one speak job; returns the handle plus the settled outcome for tests. */
 export function startSpeakJob(
   deps: SpeakDeps,
-  input: { readonly text: string; readonly voice?: string; readonly rate?: number },
+  input: {
+    readonly text: string;
+    readonly voice?: string;
+    readonly rate?: number;
+    /** Fires once the wav exists and audible playback begins (the call card's 播放中). */
+    readonly onPlay?: () => void;
+  },
 ): { readonly jobId: string; readonly audioRef: AudioRef; readonly settled: Promise<JobOutcome> } {
   const file = deps.audioPath();
   const controller = new AbortController();
@@ -79,6 +85,7 @@ export function startSpeakJob(
       });
       // Playback is best-effort per platform, but a failure is SURFACED — a
       // swallowed error left users with "job completed but silent".
+      input.onPlay?.();
       await deps.tts.play(file, controller.signal);
       return { status: 'completed', detail: `${input.text.length} chars` };
     } catch (error) {
@@ -188,8 +195,8 @@ export function buildSpeakDeps(
       const note: UserMessage = {
         id: MessageId(`voice-fail-${mintNoteId()}`),
         role: 'user',
-        content: [{ type: 'text', text: `dsh-voice: speak failed — ${message}` }],
-        source: { kind: 'plugin', plugin: 'dsh-voice', form: 'notice', summary: 'speak failed' },
+        content: [{ type: 'text', text: `dsh-voice-call: speak failed — ${message}` }],
+        source: { kind: 'plugin', plugin: 'dsh-voice-call', form: 'notice', summary: 'speak failed' },
       };
       try {
         exec.agent.inject(note);

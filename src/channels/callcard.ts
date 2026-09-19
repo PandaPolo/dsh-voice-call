@@ -14,11 +14,15 @@
  *   call-card UI, so the call degrades to the v0.1 user-questions prompt;
  * - no subscribers, no fallback (headless) → refuse with `unavailable`.
  *
+ * An accepted call keeps its card: the human answered, but the message still
+ * has to be synthesized and played, so the leg runs until the speak job settles
+ * it (see {@link CallCardRingChannel.leg}).
+ *
  * @module dsh-voice-call/channels/callcard
  */
 import type { CallDecision } from '../domain/call.ts';
 import { CallBoard } from '../callcard/board.ts';
-import type { RingChannel, RingOutcome, RingRequest } from './ring.ts';
+import type { CallLeg, RingChannel, RingOutcome, RingRequest } from './ring.ts';
 
 /** Everything the card channel needs; injected so tests run with fakes. */
 export interface CallCardChannelDeps {
@@ -76,6 +80,20 @@ export class CallCardRingChannel implements RingChannel {
         },
       );
     });
+  }
+
+  /**
+   * Keep the card on screen for the accepted call's active leg: the ring is
+   * over but the message has not been heard yet. The board entry survives the
+   * answer, so the leg reports land on it — and a leg nobody settles (a speak
+   * job that never returns) still clears, because the caller caps it.
+   */
+  leg(callId: string): CallLeg {
+    const { board } = this.deps;
+    return {
+      playing: () => board.playing(callId),
+      settle: (status, reason) => board.settle(callId, status, reason),
+    };
   }
 }
 

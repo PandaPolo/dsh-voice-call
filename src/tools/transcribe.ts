@@ -210,7 +210,7 @@ export function buildTranscribeDeps(
         id: MessageId(`voice-${noteId}`),
         role: 'user',
         content: [{ type: 'text', text: transcript }],
-        source: { kind: 'plugin', plugin: 'dsh-voice', form: 'notice', summary: 'voice note transcribed' },
+        source: { kind: 'plugin', plugin: 'dsh-voice-call', form: 'notice', summary: 'voice note transcribed' },
       };
       exec.agent.send(message, 'next-step', true);
     },

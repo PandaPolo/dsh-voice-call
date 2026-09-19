@@ -12,13 +12,19 @@
  * @module dsh-voice-call/client/callcard-api
  */
 
-/** The `ringing` payload (client mirror of the host's `CallCardRingState`). */
+/** The `ringing` / `active` payload (client mirror of `CallCardRingState`). */
 export interface CallCardRingState {
   readonly callId: string;
   readonly text: string;
   readonly voice: string;
   readonly caller: { readonly name: string; readonly sessionId?: string };
   readonly ringAt: number;
+  /** `active` = the human answered and the agent is (about to be) speaking. */
+  readonly phase: 'ringing' | 'active';
+  /** Epoch ms the human pressed 接听 — the card counts the call from here. */
+  readonly answeredAt?: number;
+  /** Playback started; until then the card is waiting on synthesis. */
+  readonly playing?: boolean;
 }
 
 /** The `settled` payload (client mirror of the host's `CallCardSettledState`). */
@@ -26,6 +32,8 @@ export interface CallCardSettledState {
   readonly callId: string;
   readonly decision: 'accepted' | 'rejected' | 'later' | 'missed';
   readonly reason?: string;
+  /** How an ACCEPTED call's active leg ended, when there was one. */
+  readonly status?: 'finished' | 'failed';
 }
 
 /** The human's answer — the reserved `VoiceAnswerPayload` contract verbatim. */
@@ -53,8 +61,8 @@ export async function answerCallOnHost(payload: VoiceAnswerPayload): Promise<Voi
   return await response.json() as VoiceAnswerResult;
 }
 
-/** Fetch the currently ringing calls (boot catch-up without SSE). */
-export async function fetchRingingCalls(): Promise<CallCardRingState[]> {
+/** Fetch the live call table (boot catch-up without SSE): ringing and active legs. */
+export async function fetchLiveCalls(): Promise<CallCardRingState[]> {
   const response = await fetch('/voice/call/state', { headers: { accept: 'application/json' } });
   if (!response.ok) return [];
   const body = await response.json() as { calls?: readonly CallCardRingState[] };
@@ -64,6 +72,7 @@ export async function fetchRingingCalls(): Promise<CallCardRingState[]> {
 /** The live-event handlers the overlay registers. */
 export interface CallEventHandlers {
   readonly onRinging: (call: CallCardRingState) => void;
+  readonly onActive: (call: CallCardRingState) => void;
   readonly onSettled: (call: CallCardSettledState) => void;
 }
 
@@ -86,6 +95,9 @@ export function connectCallEvents(handlers: CallEventHandlers): () => void {
     source = new EventSource('/voice/call/events');
     source.addEventListener('ringing', (event) => {
       handlers.onRinging(JSON.parse((event as MessageEvent<string>).data) as CallCardRingState);
+    });
+    source.addEventListener('active', (event) => {
+      handlers.onActive(JSON.parse((event as MessageEvent<string>).data) as CallCardRingState);
     });
     source.addEventListener('settled', (event) => {
       handlers.onSettled(JSON.parse((event as MessageEvent<string>).data) as CallCardSettledState);
