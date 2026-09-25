@@ -12,8 +12,10 @@ jobs:
       fail-fast: false
       matrix:
         # Playback (SoundPlayer/afplay/aplay) and PATH probing are
-        # platform-dependent — both major OS families get tested.
-        os: [ubuntu-latest, windows-latest]
+        # platform-dependent, and the quoting in src/backends/quote.ts picks its
+        # dialect by platform — so all three families get tested, including the
+        # macOS-only `say`/swift backends and shims/*.swift.
+        os: [ubuntu-latest, windows-latest, macos-latest]
         # Tests run on Node's native TS type-stripping (needs 22.18+); the
         # plugin runtime itself supports Node 20+ per engines.
         node: [22]
