@@ -17,7 +17,7 @@ const sayAvailable = process.platform === 'darwin' && probeSay();
 
 /** A fake context whose shell seam runs commands through the real `sh`. */
 function realShellCtx(): { get(key: string): unknown } {
-  const run = async (spec: { command: string }): Promise<{
+  const exec = async (spec: { command: string }): Promise<{
     exitCode: number | null;
     signal: null;
     timedOut: boolean;
@@ -27,13 +27,9 @@ function realShellCtx(): { get(key: string): unknown } {
     stderr: { text: string; truncated: boolean };
   }> => {
     const { execFile } = await import('node:child_process');
-    return await new Promise((resolve, reject) => {
+    return await new Promise((resolve) => {
       execFile('/bin/sh', ['-c', spec.command], { maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
-        if (error === null) {
-          resolve({ exitCode: 0, signal: null, timedOut: false, aborted: false, timeoutMs: 60000, stdout: { text: stdout, truncated: false }, stderr: { text: stderr, truncated: false } });
-          return;
-        }
-        const code = typeof error.code === 'number' ? error.code : 1;
+        const code = error === null ? 0 : typeof error.code === 'number' ? error.code : 1;
         resolve({ exitCode: code, signal: null, timedOut: false, aborted: false, timeoutMs: 60000, stdout: { text: stdout, truncated: false }, stderr: { text: stderr, truncated: false } });
       });
     });
@@ -41,9 +37,16 @@ function realShellCtx(): { get(key: string): unknown } {
   return {
     get(key: string): unknown {
       if (key === 'shell') {
+        // The seam the plugin actually calls: `resolve(request) → spec`, then
+        // `execute(spec) → execution`, then `await execution.result()`. This fake
+        // used to hand back a `run` method, which the plugin never calls — so the
+        // whole macOS path failed the moment CI got a macOS runner.
         return {
           resolve: (request: { command: string }) => ({ ...request, workdir: '.', timeoutMs: 60000, stdoutMaxBytes: 4 * 1024 * 1024, sandboxPolicy: undefined }),
-          run,
+          execute: async (spec: { command: string }) => {
+            const outcome = await exec(spec);
+            return { result: async () => outcome };
+          },
         };
       }
       return undefined;
@@ -81,8 +84,11 @@ describe('say backend integration', { skip: sayAvailable ? false : 'macOS say is
     const backend = new SayTtsBackend(run);
     await backend.synthesize({ text: 'hi', voice: 'Samantha', rate: 180 }, '/tmp/x.m4a');
     assert.equal(commands.length, 1);
-    assert.match(commands[0] ?? '', /--voice 'Samantha'/);
-    assert.match(commands[0] ?? '', /-r '180'/);
-    assert.match(commands[0] ?? '', /--data-format=aac/);
+    // Every token is quoted now, flags included — that is what closed the hole
+    // where a `-`-prefixed value was pasted into the command line raw. A quoted
+    // flag is still a flag to both shell families, so the engine sees the same argv.
+    assert.match(commands[0] ?? '', /'--voice' 'Samantha'/);
+    assert.match(commands[0] ?? '', /'-r' '180'/);
+    assert.match(commands[0] ?? '', /'--data-format=aac'/);
   });
 });
