@@ -84,7 +84,7 @@ If you fork, improve, or build on this project, please keep this note — it is 
 - `/voice` command — status, `on|off` narration toggle, `speak <text>`.
 - **9 CustomVoice speakers** including two Chinese dialects: `aiden` · `dylan` (Beijing) · `eric` (Sichuan) · `ono_anna` · `ryan` · `serena` · `sohee` · `uncle_fu` · `vivian`.
 - **durableEvents gate** — session-event logging is off by default (see Compatibility): on the harness release where it was tested, turning it on makes the session history unloadable.
-- **Published on npm**: install `dsh-voice-call@0.3.5` directly.
+- **Published on npm**: install `dsh-voice-call@0.3.6` directly.
 
 ## 🆕 What changed in 0.3.5
 
@@ -103,6 +103,8 @@ The previous release put the features in: one-click provisioning, eleven rington
 The parts that were already kind to you stay where they were, unfurled and unhidden: **试听** next to the ringtone dropdown loops the tone you picked *at the volume the card will actually use*; the 运行环境 row takes its defaults from what the directory really holds; cleanup is a visible button that states its weight rather than a checkbox buried in advanced options.
 
 ---
+
+**0.3.6** holds the same bar on three platforms: CI now runs Linux, Windows and macOS. It immediately found four problems that only exist on the other systems — the cleanup root check on Linux (it read `TMP/TEMP/TMPDIR` directly, and those are unset on Linux, so `/tmp` was not refused; it now asks `os.tmpdir()`), unpack fixtures whose fake engine binary had no executable bit, two tests written with Windows assumptions, and a macOS integration fake that no longer matched the harness seam it stands in for (the production runner was right all along). All 262 tests are green on all three, and the macOS pair is confirmed to actually run `say` and produce a readable audio file rather than being skipped into greenness.
 
 ## 🚀 Quick start
 
@@ -291,7 +293,7 @@ dsh web
 | Write endpoints | The four state-changing routes (`/voice/call/answer`, `/voice/provision/{prepare,adopt,cancel,cleanup}`) are refused with 403 on a cross-site `Sec-Fetch-Site`, and fall back to comparing `Origin` against `Host` when the header is absent. The host webserver carries no session, token or origin check of its own and `host` is configurable to `0.0.0.0`, so this is the only barrier on the browser surface. A local process (curl) sends neither header and stays reachable: a loopback port has no shared secret to check, and that residual is stated rather than papered over. |
 | Shell sandbox | Local engine commands run with an explicit `danger-full-access` policy — the engine binaries, GGUF models, and audio dir span roots no confined sandbox mode covers. **Evaluate this trust boundary before deploying.** |
 | Call card | v0.2 rides the webserver route seam (SSE `/voice/call/events` + `POST /voice/call/answer`; the body is the reserved `VoiceAnswerPayload` contract verbatim). Web composition only — headless falls back to the modal/refusal. Same-origin trust level as the audio route. |
-| Tests | 262 unit and route tests, all green (`pnpm test`); `pnpm typecheck` now covers `src/`, `src/client/` and `test/` — the test suite was outside the type check before. |
+| Tests | 262 unit and route tests, all green on Linux / Windows / macOS (`pnpm test`, three-platform CI matrix); `pnpm typecheck` now covers `src/`, `src/client/` and `test/` — the test suite was outside the type check before. |
 
 ## 🛠 Development
 
@@ -308,6 +310,7 @@ pnpm test        # node --test
 - **v0.2** ✅ dedicated call-card UI (ring animation, caller identity) — `callMode: card`, riding the webserver route seam with payloads identical to the reserved RPC contract (`src/rpc/contract.ts`), ready to migrate onto a real connection-RPC later.
 - **v0.3.0** ✅ the card stays up through the whole spoken leg of an accepted call (an `active` phase aligned with the background job).
 - **v0.3.5** ✅ one-click provisioning, eleven ringtones with audition, one-click cleanup, and the backend review above.
+- **v0.3.6** ✅ cross-platform review: CI extended to Linux / Windows / macOS, plus the four problems it caught.
 - **Next** — voicemail for missed calls + AI read receipts (`src/domain/voicemail.ts`, reserved event types).
 - **v1.0** — freeze the schema, ship the stable release.
 

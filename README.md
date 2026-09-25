@@ -80,7 +80,7 @@ agent 选择对世界说出的第一句话是：
 - `/voice` 命令 —— 状态查询、`on|off` 朗读开关、`speak <text>` 直接说话。
 - **9 个 CustomVoice 音色**，含 2 个中文方言：`aiden` · `dylan`（北京话）· `eric`（四川话）· `ono_anna` · `ryan` · `serena` · `sohee` · `uncle_fu` · `vivian`。
 - **durableEvents 开关** —— 会话事件日志默认关闭（见"兼容性"）：在验证过的那一版 harness 上，开启会让会话历史无法加载。
-- **已发布 npm**：`dsh-voice-call@0.3.5` 可直接安装。
+- **已发布 npm**：`dsh-voice-call@0.3.6` 可直接安装。
 
 ## 🆕 0.3.5 —— 这一版几乎全是「不用你操心」
 
@@ -99,6 +99,8 @@ agent 选择对世界说出的第一句话是：
 对用户友好的那部分照旧在老位置，没有藏：设置卡里「铃声」下拉框旁边的**试听**以来电时的真实音量循环播你选的那一条；「运行环境」的默认值取自目录里**实际装着**的东西而不是清单上第一个；清理是一个看得见、写明重量的按钮，不折叠、不藏在高级选项里。
 
 ---
+
+**0.3.6** 把同一套标准推到了三个平台：自动检查现在同时跑 Linux、Windows、macOS。加上之后它当场抓出四处只在别的系统上才存在的问题——Linux 上的清理根判定（原先手工读 `TMP/TEMP/TMPDIR`，那些变量在 Linux 上根本没设，于是 `/tmp` 不会被拒绝；现在改问 `os.tmpdir()`）、装配 fixture 里假的引擎文件缺了可执行位、两条按 Windows 想事情写的用例，以及 macOS 集成测试里一个模仿错了本体的假 harness 替身（生产代码一直是对的）。262 个测试在三个系统上全绿，macOS 那两条确认是**真跑了 `say` 并产出可读的音频文件**，不是被跳过去凑绿。
 
 ## 🚀 快速开始
 
@@ -287,7 +289,7 @@ dsh web
 | Shell 沙箱 | 本地引擎命令以显式 `danger-full-access` 策略运行——引擎二进制、GGUF 模型、音频目录跨越了受限沙箱模式无法覆盖的多个根。**部署前请评估此信任边界。** |
 | 写接口 | 四个改状态的端点（`/voice/call/answer`、`/voice/provision/{prepare,adopt,cancel,cleanup}`）先查 `Sec-Fetch-Site`，跨站的直接 403；没有这个头时退回比对 `Origin` 与 `Host`。宿主 webserver 本身不带任何鉴权（只有 gzip 中间件），`host` 还可以配成 `0.0.0.0`，所以这道门是浏览器攻击面上唯一的屏障。本机进程（curl 等）不带这些头，仍然可调用——回环端口没有共享密钥可查，这是明说的残余风险。 |
 | 来电卡片 | v0.2 走 webserver 路由缝隙（SSE `/voice/call/events` + `POST /voice/call/answer`，载荷即预留的 `VoiceAnswerPayload` 契约）；仅 web 组合可用，headless 自动回落弹窗/拒接。同源信任级别与音频路由一致。 |
-| 测试 | 262 个单元/路由测试全绿（`pnpm test`）；`pnpm typecheck` 现在同时检查 `src/`、`src/client/` 和 `test/`——测试代码此前从不在类型检查范围内。 |
+| 测试 | 262 个单元/路由测试在 Linux / Windows / macOS 上全绿（`pnpm test`，CI 三平台矩阵）；`pnpm typecheck` 现在同时检查 `src/`、`src/client/` 和 `test/`——测试代码此前从不在类型检查范围内。 |
 
 ## 🛠 开发
 
@@ -304,6 +306,7 @@ pnpm test        # node --test
 - **v0.2** ✅ 专属来电卡片 UI（振铃动画、来电者身份）——`callMode: card`，走 webserver 路由缝隙，载荷与预留的 RPC 契约（`src/rpc/contract.ts`）逐字一致，未来可平移到真正的 connection-RPC。
 - **v0.3.0** ✅ 接听后的卡片留在屏上直到整段话说完（`active` 相位 + 后台任务对齐）。
 - **v0.3.5** ✅ 一键装配、11 条可选铃声与试听、一键清理，加上后端逐项复核（见上一节）。
+- **v0.3.6** ✅ 跨平台复核：CI 扩到 Linux / Windows / macOS 三栏，并修掉它抓出的四处问题。
 - **下一版** —— 错过来电的语音信箱 + AI 已读回执（`src/domain/voicemail.ts`，事件类型已预留）。
 - **v1.0** —— 冻结 schema，发布稳定版。
 
