@@ -37,16 +37,29 @@ import type {} from '@deepseek-ai/dsh-system-prompt';
 import type {} from '@deepseek-ai/dsh-tools';
 import type {} from '@deepseek-ai/dsh-user-questions';
 import z from '@deepseek-ai/schemastery';
-import { AudioStore, resolveAudioDir } from './audio.ts';
+import { AudioStore, confineAudioInput, resolveAudioDir } from './audio.ts';
 import { CallBoard } from './callcard/board.ts';
 import { installCallCardRoutes } from './callcard/web.ts';
+import { DEFAULT_PALETTE, PALETTE_IDS } from './client/palettes.ts';
+import { DEFAULT_TONE, TONE_IDS } from './client/tones.ts';
 import { createRecordFn, createSttBackend, createTtsBackend } from './backends/index.ts';
+import { probeCrispasr } from './backends/probe.ts';
 import { AskUserRingChannel, DirectRingChannel, type RingChannel } from './channels/ring.ts';
 import { CallCardRingChannel } from './channels/callcard.ts';
 import { registerVoiceCommand } from './command.ts';
 import { installVoicePersona } from './persona.ts';
 import { installReadReplies, ReadRepliesToggle } from './read-replies.ts';
-import { installVoiceSettings } from './settings.ts';
+import { voiceConfigSource } from './settings.ts';
+import { provisionLayout } from './provision/layout.ts';
+import { readInstalledModels, readProvisionedEngine, withProvisionedEngine } from './provision/engine.ts';
+import type { InstalledModels, ProvisionedEngine } from './provision/engine.ts';
+import { DEFAULT_SOURCE, defaultModels, recommendedVariant } from './provision/manifest.ts';
+import { ProvisionRunner } from './provision/state.ts';
+import type { PrepareRequest } from './provision/state.ts';
+import { detectDevice, unknownDevice } from './provision/detect.ts';
+import { installProvisionRoutes } from './provision/web.ts';
+import { createUnpacker } from './provision/unpack.ts';
+import { makeShellRunner } from './backends/runner.ts';
 import { applyOfferCallTool, buildOfferCallDeps } from './tools/offer-call.ts';
 import { applySpeakTool, buildSpeakDeps } from './tools/speak.ts';
 import { applyTranscribeTool, buildTranscribeDeps } from './tools/transcribe.ts';
@@ -67,7 +80,17 @@ declare module '@deepseek-ai/dsh-jobs' {
   }
 }
 
-/** Plugin config (all fields optional — defaults match the documented behavior). */
+/**
+ * Plugin config (all fields optional — defaults match the documented behavior).
+ *
+ * A field marked `.volatile()` is editable in the host's configuration surface
+ * without remounting the plugin: the loader hands it to `apply()` as a live
+ * reference, and `voiceConfigSource` detaches it on every read, so a change
+ * reaches the next tool call. Marked fields are exactly the ones whose effect is
+ * already read per call — the engine paths, `audioDir` and the durable-event
+ * switch would need a reload to take effect, so they stay unmarked and the host
+ * refuses form writes to them.
+ */
 export const Config = z.object({
   stt: z.object({
     backend: z.union(['whisper-local', 'openai', 'macos', 'fake']),
@@ -77,21 +100,33 @@ export const Config = z.object({
   }),
   tts: z.object({
     backend: z.union(['say', 'piper', 'edge-tts', 'fake', 'crispasr']),
-    voice: z.string(),
-    rate: z.number().min(1).max(600),
+    voice: z.string().volatile(),
+    rate: z.number().min(1).max(600).volatile(),
     piper: z.object({ bin: z.string(), model: z.string() }),
     edgeTts: z.object({ voice: z.string() }),
-    crispasr: z.object({ bin: z.string(), model: z.string(), codec: z.string() }),
+    crispasr: z.object({ bin: z.string(), model: z.string(), codec: z.string(), backend: z.string() }),
   }),
   readReplies: z.boolean().default(false),
   // Session-log durability for voice events. MUST stay off on harness builds
   // without plugin-event support (rc.6 refuses unknown event types on history
   // load — an appended voice/* event poisons the session log).
   durableEvents: z.boolean().default(false),
-  callMode: z.union(['ask', 'card', 'direct', 'off']).default('ask'),
+  callMode: z.union(['ask', 'card', 'direct', 'off']).default('ask').volatile(),
   callCard: z.object({
     callerName: z.string(),
-    ringTimeoutMs: z.number().min(1000).max(600_000),
+    ringTimeoutMs: z.number().min(1000).max(600_000).volatile(),
+    // These three are pure presentation, read by the card on every render, so they
+    // are the fields the settings card can change and have take effect on the very
+    // next ring — the ringtone with it, because 静音 while it is sounding has to
+    // reach the same element the toggle writes.
+    theme: z.union(['system', 'light', 'dark']).default('system').volatile(),
+    palette: z.union(PALETTE_IDS).default(DEFAULT_PALETTE).volatile(),
+    ringtone: z.boolean().default(true).volatile(),
+    // Which of the bundled ringtones the above plays. A union over the table the
+    // settings card draws its dropdown from, so an id the UI offers is the only
+    // kind of id the profile can hold — and the route never resolves a path from
+    // it, it looks the id up in `src/client/tones.ts`.
+    tone: z.union(TONE_IDS).default(DEFAULT_TONE).volatile(),
   }),
   audioDir: z.string(),
   // Reserved for v0.3 — accepted now so configs written against v0.1 keep loading.
@@ -101,11 +136,101 @@ export const Config = z.object({
 
 /** Mount the plugin: settings, tools, narration, call domain, persona, command, web route. */
 export function apply(ctx: Context, rawConfig: VoiceConfigInput): void {
-  // Settings: live source thunk; backends resolve fresh per tool call.
-  let current = (): VoiceConfig => resolveConfig(rawConfig);
+  // Settings: the effective config is re-resolved on every read, which is what
+  // carries a volatile field edited in the settings UI into the next tool call.
+  const current = voiceConfigSource(rawConfig);
 
   // Audio store: plain files under audioDir; the log carries refs only.
-  let audioRoot = resolveAudioDir(current().audioDir);
+  // `audioDir` is not a volatile field, so the root is fixed for this fiber.
+  const audioRoot = resolveAudioDir(current().audioDir);
+  // The engine's shell calls span several roots (binary, GGUF models, the audio
+  // dir) that no confined sandbox mode covers, and the Windows ACL runner is
+  // unusable when the temp dir sits inside the workspace — so the policy is
+  // explicit, and shared by synthesis *and* provisioning.
+  const fullAccessPolicy = { mode: 'danger-full-access' as const, workspaceRoot: process.cwd() };
+
+  // Provisioning: the voice root doubles as the install root, so one folder
+  // holds the audio, the engine, the models and `provision.json`. `provisioned`
+  // is re-read at mount and whenever a run lands on a terminal phase; the
+  // backend layer sees it merged *under* the config, which is what keeps a
+  // hand-written `tts.crispasr` path in front of anything the plugin installs.
+  const provisionRoot = provisionLayout(audioRoot);
+  let deviceReport = unknownDevice();
+  const provisionRunner = new ProvisionRunner({
+    layout: provisionRoot,
+    unpack: createUnpacker(makeShellRunner(ctx, fullAccessPolicy)),
+  });
+  let provisioned: ProvisionedEngine | undefined;
+  let installedModels: InstalledModels = {};
+  const shellRun = makeShellRunner(ctx, fullAccessPolicy);
+  /**
+   * Start a read that runs behind the mount and report what it could not do.
+   *
+   * These used to be bare `void promise` calls, which is how a rejection reaches
+   * Node as an unhandled rejection — and Node's default for that is to end the
+   * process, taking the whole host down over one unreadable directory. The
+   * fallback is already the honest one (the card says 未探测到设备 rather than
+   * guessing), so what is missing here is only the record of why.
+   */
+  const background = (label: string, run: () => Promise<unknown>): void => {
+    void run().catch((error: unknown) => ctx.logger.warn(`dsh-voice-call: ${label}`, error));
+  };
+  /**
+   * Ask the engine what it can run. The binary we ask is the one the plugin
+   * would actually use — provisioned root last, hand-configured path first — so
+   * a user whose CUDA build lives in `D:\crispasr` is offered the CUDA archive,
+   * not a greyed-out list.
+   */
+  const detect = async (): Promise<void> => {
+    const configured = current().tts.crispasr?.bin;
+    const bin = configured !== undefined && configured !== '' ? configured : provisioned?.bin;
+    deviceReport = await detectDevice(shellRun, bin ?? 'crispasr');
+  };
+  background('device detection failed', detect);
+  const refreshProvisioned = (): Promise<void> => readProvisionedEngine(provisionRoot).then(async (engine) => {
+    provisioned = engine;
+    // Read separately from the engine above: a *half*-provisioned root is not an
+    // engine, but the models it does hold are still the ones on disk, and the
+    // plan must believe the disk.
+    installedModels = await readInstalledModels(provisionRoot);
+    await detect();
+    // The device line arrives after the routes are mounted, and a first read on a
+    // fresh root has to guess. Re-inspect once the engine has answered, so the
+    // card stops describing a build nobody chose — but only while nothing has
+    // actually run: re-reading after a failure would overwrite the step that
+    // failed with a plain `未安装` and throw away the reason.
+    const before = provisionRunner.snapshot().phase;
+    const request = provisionRequest();
+    if (request !== undefined && (before === 'unknown' || before === 'unprepared') && !provisionRunner.busy) {
+      background('provision re-inspection failed', () => provisionRunner.inspect(request));
+    }
+  });
+  background('reading the provisioned root failed', refreshProvisioned);
+  let lastPhase = provisionRunner.snapshot().phase;
+  provisionRunner.subscribe((view) => {
+    if (view.phase === lastPhase) return;
+    lastPhase = view.phase;
+    // A freshly installed engine can answer questions the previous one could
+    // not, so the device line is re-read with it.
+    if (view.phase !== 'preparing') background('re-reading the provisioned root failed', refreshProvisioned);
+  });
+  const provisionRequest = (): PrepareRequest | undefined => {
+    // The installed build wins; a fresh root asks the manifest what this machine
+    // should get. No selectable build (an architecture we do not ship) means
+    // provisioning stays out of the way rather than offering something broken.
+    const variant = provisioned?.variant ?? recommendedVariant(deviceReport);
+    if (variant === undefined) return undefined;
+    const pair = defaultModels();
+    return {
+      variant,
+      talker: installedModels.talker ?? pair.talker,
+      codec: installedModels.codec ?? pair.codec,
+      // An engine the config already names is not work to pay for: the row stays
+      // visible, but the plan stops putting 693 MB behind the default button.
+      engineFromConfig: probeCrispasr(current()),
+      source: DEFAULT_SOURCE,
+    };
+  };
   // The call-card board: the host half of the v0.2 card UI. The web routes
   // stream its state to connected clients; with no webserver (headless) it
   // simply never gains subscribers and the card channel falls back to the
@@ -121,26 +246,26 @@ export function apply(ctx: Context, rawConfig: VoiceConfigInput): void {
   // silently registers nothing (the harness's own web-app waits the same
   // way). In headless compositions the service never appears and the
   // callback simply never fires.
-  let routesReady = false;
   ctx.inject(['webServer'], () => {
-    routesReady = true;
     mountRoute();
-    installCallCardRoutes(ctx, callBoard);
-  });
-  current = installVoiceSettings(ctx, rawConfig, () => {
-    audioRoot = resolveAudioDir(current().audioDir);
-    if (routesReady) mountRoute();
+    installCallCardRoutes(ctx, callBoard, () => {
+      const { theme, palette, ringtone, tone } = current().callCard;
+      return { theme, palette, ringtone, tone };
+    });
+    if (provisionRequest() !== undefined) {
+      installProvisionRoutes(
+        ctx, provisionRunner, provisionRoot,
+        () => provisionRequest() as PrepareRequest,
+        () => deviceReport,
+        () => probeCrispasr(withProvisionedEngine(current(), provisioned)),
+      );
+    }
   });
   const audioStore = (): AudioStore => new AudioStore(audioRoot);
   const audioPath = (): string => audioStore().pathFor(`voice-speak-${speakSeq()}`, 'wav');
 
   // Backends: created per call so config changes reach the next tool call.
-  // The local TTS engine spans several roots (engine bin, GGUF models, the
-  // audio dir) that no confined sandbox mode covers, and the Windows ACL
-  // runner is unusable when the temp dir sits inside the workspace — so the
-  // engine's shell calls carry an explicit danger-full-access policy.
-  const fullAccessPolicy = { mode: 'danger-full-access' as const, workspaceRoot: process.cwd() };
-  const backendDeps = () => ({ ctx, config: current(), policy: fullAccessPolicy });
+  const backendDeps = () => ({ ctx, config: withProvisionedEngine(current(), provisioned), policy: fullAccessPolicy });
   const agentFor = (session: { readonly id: string }): Agent | undefined => {
     const agents = ctx.get('agents') as { get(id: string): Agent | undefined } | undefined;
     return agents?.get(session.id);
@@ -151,6 +276,10 @@ export function apply(ctx: Context, rawConfig: VoiceConfigInput): void {
       stt: createSttBackend(backendDeps()),
       record: createRecordFn(backendDeps()),
       commit: (file, name, extra) => audioStore().commit(file, name, extra),
+      // The model names a file; the store decides whether this deployment may
+      // read it. Without this line the name went straight to the backend and
+      // then into a copy inside the directory the web route serves.
+      confine: (file) => confineAudioInput(audioRoot, file),
       durableEvents: () => current().durableEvents,
     }, exec),
   });
@@ -213,11 +342,15 @@ export function apply(ctx: Context, rawConfig: VoiceConfigInput): void {
     readReplies: () => toggle.enabled,
     setReadReplies: (enabled) => toggle.set(enabled),
     statusLine: () => {
-      const config = current();
-      return `stt: ${config.stt.backend ?? 'auto'} · tts: ${config.tts.backend ?? 'auto'} · readReplies: ${toggle.enabled ? 'on' : 'off'}`;
+      const config = withProvisionedEngine(current(), provisioned);
+      const engine = config.tts.crispasr;
+      const local = engine !== undefined && engine.bin !== ''
+        ? provisioned !== undefined && engine.bin === provisioned.bin ? `已装配 ${provisioned.variant.id}` : '指向手动配置的引擎'
+        : '未装配（可在插件页一键安装）';
+      return `stt: ${config.stt.backend ?? 'auto'} · tts: ${config.tts.backend ?? 'auto'} · readReplies: ${toggle.enabled ? 'on' : 'off'} · 本地引擎: ${local}`;
     },
     callMode: () => current().callMode,
-    configLine: () => `audioDir: ${audioRoot}`,
+    configLine: () => `audioDir: ${audioRoot}\n  engine: ${provisioned?.bin ?? '(未装配)'}\n  手动放置到: ${provisionRoot.downloadDir()}`,
     speakDeps: (session) => buildSpeakDeps(ctx, {
       tts: createTtsBackend(backendDeps()),
       audioPath,

@@ -42,7 +42,8 @@ export function makeShellRunner(ctx: Context, policy?: VoiceSandboxPolicy): Shel
       ...(opts?.stdin !== undefined ? { stdin: opts.stdin } : {}),
       ...(opts?.sandboxPolicy !== undefined ? { sandboxPolicy: opts.sandboxPolicy } : policy !== undefined ? { sandboxPolicy: policy } : {}),
     };
-    const result = await shell.run(shell.resolve(request));
+    const execution = await shell.execute(shell.resolve(request));
+    const result = await execution.result();
     return {
       exitCode: result.exitCode,
       stdout: result.stdout.text,

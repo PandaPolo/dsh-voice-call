@@ -8,8 +8,8 @@
   <a href="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml"><img src="https://github.com/PandaPolo/dsh-voice-call/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
-  <img src="https://img.shields.io/badge/harness-0.1.5--rc.2-5b5bd6" alt="DSH 0.1.5-rc.2" />
-  <img src="https://img.shields.io/badge/tests-95%20green-1f883d" alt="95 个测试全绿" />
+  <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
+  <img src="https://img.shields.io/badge/tests-262%20green-1f883d" alt="262 个测试全绿" />
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
 
 本地优先、可完全离线：合成跑在本机 **CrispASR + Qwen3-TTS CustomVoice** 引擎上（9 个内置音色，含 2 个中文方言），音频是 `~/.dsh/voice/` 下的普通文件，任何音频行为都不会自动运行——必须由模型调用工具（或接听一次来电）。
 
-> Fork 自 [Jesse-njx/dsh-voice](https://github.com/Jesse-njx/dsh-voice)，新增通话域、crispasr 后端、本地播放，以及针对 rc.6 harness 插件事件与后台任务限制的修复。
+> Fork 自 [Jesse-njx/dsh-voice](https://github.com/Jesse-njx/dsh-voice)，新增通话域、crispasr 后端、本地播放，以及在 harness 的插件事件与后台任务限制上踩到的那些坑。
 
 ---
 
@@ -72,17 +72,38 @@ agent 选择对世界说出的第一句话是：
 
 - `offer_call({ text, voice? })` —— 通话域：振铃 → 人类应答 → 接听则后台任务合成并播放；拒接/推迟则把决定返回给 agent。
 - **专属来电卡片（v0.2）** —— `callMode: card` 时来电以浮层卡片振铃：双环脉冲动画、来电者身份（名字 + 会话尾号 + 音色徽章）、想说的话预览、超时自动判 `missed`；无网页客户端连接时自动回落到弹窗询问。
+- **来电铃声与选铃声（0.3.5）** —— 卡片弹起时播放插件自带的铃声，**全部是本机脚本合成的，不是任何第三方音频**（微信铃声那类是别人的版权物，不用）。设置卡的「铃声」下拉框里有 11 条可选：默认的 `classic` 是下行小调五声拨弦（刻意避开高铁/飞机广播那种上行大三和弦），另有毡音钢琴、尼龙弦吉他、马林巴、八音盒、拇指琴、颂钵、低吟、电钢琴渐强、竹笛、小铃。旁边一个「试听」以来电卡片的真实音量循环播这一条，再点一次停。全部由 `scripts/gen-ringtone-candidates.mjs` 生成，`src/client/tones.ts` 是唯一的 id→文件表。卡片上还有一个只关当次来电的「静音」。
+- **一键装配运行环境（0.3.5）** —— 设置卡的「运行环境」区先探测这台机器（`os` + 引擎 `--diagnostics` 的显卡与显存），**默认值取自目录里实际装着的东西**（没装才按能力选构建），一个按钮下齐缺的东西：断点续传、多路下载、测速择优、镜像优先、失败时给出手动放置的说明。模型与引擎版本在「高级选项」里可换，换完行状态和字节数会跟着重算。
+- **一键清理（0.3.5）** —— 该区底部独立一栏：左边写明「voice 目录当前占用 N GB」，右边一个「清理本地文件」按钮。按 引擎 / 模型 / 下载缓存 三组分别计量、分别勾选，二次确认后才删，且**只删 voice 目录里的东西**——你在配置里手写的 `D:\crispasr` 不在范围内，也不会被碰。
 - `speak({ text, voice?, rate? })` —— 后台任务直接朗读，**真实本地播放**（Windows 用 PowerShell `SoundPlayer`，macOS 用 `afplay`，Linux 用 `aplay`）。
-- `transcribe({ source, to? })` —— 语音转文字成为用户消息（whisper-local / openai / macOS 原生）；`to` 可跨会话投递（需 dsh-crosstalk）。
+- `transcribe({ source, to? })` —— 语音转文字成为用户消息（whisper-local / openai / macOS 原生）；`to` 可跨会话投递（需 dsh-crosstalk）。`source.file` 只能是**音频目录里面**的文件（默认 `~/.dsh/voice`），越界的路径会被拒绝并说明原因；录音走 `source.record`。
 - `/voice` 命令 —— 状态查询、`on|off` 朗读开关、`speak <text>` 直接说话。
 - **9 个 CustomVoice 音色**，含 2 个中文方言：`aiden` · `dylan`（北京话）· `eric`（四川话）· `ono_anna` · `ryan` · `serena` · `sohee` · `uncle_fu` · `vivian`。
-- **durableEvents 开关** —— 会话事件日志默认关闭（见"兼容性"），保证 rc.6 下会话历史可继续加载。
-- **已发布 npm**：`dsh-voice-call@0.3.0` 可直接安装。
+- **durableEvents 开关** —— 会话事件日志默认关闭（见"兼容性"）：在验证过的那一版 harness 上，开启会让会话历史无法加载。
+- **已发布 npm**：`dsh-voice-call@0.3.5` 可直接安装。
+
+## 🆕 0.3.5 —— 这一版几乎全是「不用你操心」
+
+上一版把功能装上（一键装配、11 条可选铃声、来电卡片）。这一版是我回头把后端逐行查了一遍之后修的账——**功能没坏，坏的是功能对你的承诺**，而且原来的测试全都是绿的，所以它得靠人去读代码才看得出来。
+
+| 你会碰到什么 | 之前 | 现在 |
+|---|---|---|
+| 下载中途点开设置卡看一眼 | 进度条被抹平，界面改口说"未安装" | 看一眼就只是看一眼，进度照旧 |
+| 网络断了一半，再点一次装配 | 1.9 GB 从头再下一遍（尽管写着"断点续传"） | 真的接着传，已下完的部分不重下 |
+| 取消一次正在响的来电 | 卡片继续响，最长十分钟 | 卡片跟着停 |
+| 按「清理本地文件」 | 配置里 `audioDir` 写得随意一点，就可能删到别处的 `models/` | 不是本插件创建的目录直接拒删，并说清为什么 |
+| 别的网页碰到本机这个端口 | 一句跨站请求就能删掉你的模型、替你点「接听」 | 改状态的请求先验来源，跨站的拒绝 |
+| 音频文件被你自己删了，或正被程序占着 | 整个对话界面可能一起崩掉 | 那一次播放失败，其余照常 |
+| 录过一段音 | 原始录音永久留在系统临时目录 | 用完就删，失败也删 |
+
+对用户友好的那部分照旧在老位置，没有藏：设置卡里「铃声」下拉框旁边的**试听**以来电时的真实音量循环播你选的那一条；「运行环境」的默认值取自目录里**实际装着**的东西而不是清单上第一个；清理是一个看得见、写明重量的按钮，不折叠、不藏在高级选项里。
+
+---
 
 ## 🚀 快速开始
 
 ```bash
-# 1) 安装插件（从 npm 安装 0.3.0）
+# 1) 安装插件（从 npm 装最新版）
 dsh plugin --profile web add dsh-voice-call
 
 # 2) 在 profile 的 cordis.patch.yml 中按 id 更新配置（引擎路径等，见下方"环境部署"）
@@ -101,7 +122,7 @@ dsh plugin --profile web add dsh-voice-call
 | 平台 | Windows 10/11 · macOS · Linux |
 | Node.js | **≥ 20**（插件运行要求）；运行测试需要 22.18+（Node 原生 TS 类型剥离） |
 | pnpm | 9+（CI 使用 pnpm 11） |
-| dsh CLI | `@deepseek-ai/dsh`，当前 0.1.5-rc.2 |
+| dsh CLI | `@deepseek-ai/dsh`，当前 0.1.7-rc.2 |
 | 本地语音引擎 | CrispASR ≥ 0.8.28 + Qwen3-TTS GGUF 模型（推荐，否则没有本地合成音色） |
 | 模型提供商 | dsh 需要已配置可用的 LLM API 凭据（agent 本身依赖） |
 
@@ -109,7 +130,7 @@ dsh plugin --profile web add dsh-voice-call
 
 ```bash
 npm install -g @deepseek-ai/dsh
-dsh --version    # 期望输出 0.1.5-rc.2
+dsh --version    # 期望输出 0.1.7-rc.2
 ```
 
 - 确认模型提供商凭据已配置（dsh 跑 agent 需要 API key）。
@@ -169,7 +190,7 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
     tts:
       backend: crispasr        # 本地神经 TTS 引擎（推荐）
       voice: dylan             # 默认音色；crispasr 下用内置 9 音色之一
-      # rate: 180             # 语速（词/分钟，范围 1–600）
+      # rate: 180             # 语速（词/分钟，1–600；设置卡上是 慢/中/快 三档）
       crispasr:
         bin: D:\crispasr\crispasr.exe                          # 引擎可执行文件（绝对路径）
         model: D:\crispasr\models\qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf
@@ -178,8 +199,12 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
     callCard:                  # v0.2 来电卡片外观与振铃行为（callMode: card 时生效）
       callerName: DeepSeek     # 卡片上显示的来电者名字
       ringTimeoutMs: 30000     # 振铃超时；超时来电记为 missed（不无限挂起 agent）
+      ringtone: true           # 卡片弹起时播放内置铃声（插件自带，非任何第三方音频）
+      tone: classic              # 播 11 条里的哪一条；设置卡的下拉框是同一张表
+      theme: system            # system（跟随宿主）| light | dark
+      palette: azure           # 卡片强调色：azure / teal / amber / rose / violet / graphite
     readReplies: false         # 朗读回复开关（也可在会话里 /voice on 临时开启）
-    durableEvents: false       # rc.6 上必须保持 false（见"兼容性"）
+    durableEvents: false       # 保持 false（见"兼容性"）
     audioDir: ~/.dsh/voice     # 音频文件目录
     # 以下为 v0.3 预留字段，v0.1 无需配置：
     # voicemail: { enabled: false }
@@ -192,14 +217,18 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
 |---|---|---|
 | `tts.backend` | `say` / `piper` / `edge-tts` / `fake` / `crispasr` | 合成后端；`crispasr` 为本地神经 TTS（推荐）；`edge-tts` 只合成不播放；`fake` 用于无模型联调 |
 | `tts.voice` | 音色名 | crispasr 下用内置 9 音色之一，如 `dylan` |
-| `tts.rate` | 1–600 | 语速（词/分钟） |
+| `tts.rate` | 1–600 | 语速（词/分钟）。设置卡上只给 慢 150 / 中 180 / 快 220 三档；数字留给直接改配置的人 |
 | `tts.crispasr` | `bin` / `model` / `codec` | 引擎与两个 GGUF 模型的**绝对路径** |
 | `stt.backend` | `whisper-local` / `openai` / `macos` / `fake` | 留空自动探测 |
 | `callMode` | `card` / `ask` / `direct` / `off` | 来电方式：专属卡片 / 弹窗询问 / 直接接听 / 关闭 |
 | `callCard.callerName` | 任意名字 | 来电卡片显示的来电者名字，默认 `DeepSeek` |
 | `callCard.ringTimeoutMs` | 1000–600000 | 振铃超时（毫秒），默认 30000；超时记为 `missed` |
+| `callCard.ringtone` | `true` / `false` | 卡片弹起时是否播放铃声，默认 `true`。铃声是插件自己合成的 WAV，不是任何第三方音频；弹起的卡片上还有一个「静音」，只关当次来电 |
+| `callCard.tone` | `classic`（默认）/ `felt-piano` / `nylon-guitar` / `marimba` / `music-box` / `kalimba` / `singing-bowl` / `hummed-third` / `rhodes-swell` / `bamboo-flute` / `minor-chime` | 播上面这一组里的哪一条。设置卡的「铃声」下拉框是同一个表；写了表里没有的值会退回 `classic`（会响，只是退回默认那条），而不是变成静音 |
+| `callCard.theme` | `system` / `light` / `dark` | 卡片主题，默认跟随宿主 |
+| `callCard.palette` | 6 套预设 | 卡片强调色，默认 `azure` |
 | `readReplies` | `true` / `false` | 朗读回复，默认 `false` |
-| `durableEvents` | `true` / `false` | rc.6 必须 `false` |
+| `durableEvents` | `true` / `false` | 保持 `false`（见"兼容性"） |
 | `audioDir` | 路径 | 音频保存目录，默认 `~/.dsh/voice` |
 
 > 引擎实际执行的命令形如：
@@ -235,7 +264,7 @@ dsh web
 | 合成失败（exit ≠ 0） | 检查 `bin` / `model` / `codec` 三个路径是否为存在的绝对路径；codec 模型不能缺；CrispASR 需 ≥ 0.8.28 |
 | 来电振铃后没有声音 | 播放问题：Windows 上确认输出为 wav；Linux 安装 ALSA 工具；macOS 用 `afplay` |
 | 报 "unknown speaker" | 音色名必须小写且是 9 个内置之一（`aiden` / `dylan` / `eric` / `ono_anna` / `ryan` / `serena` / `sohee` / `uncle_fu` / `vivian`） |
-| 会话历史加载失败 | `durableEvents` 被改成了 `true`——rc.6 没有插件事件注册，`voice/*` 事件会毒化历史；改回 `false` |
+| 会话历史加载失败 | `durableEvents` 被改成了 `true`——插件事件没有注册入口，`voice/*` 事件会毒化历史；改回 `false` |
 | 引擎/沙箱权限错误 | 本地引擎命令需要 `danger-full-access` 策略（引擎、模型、音频目录跨越多个根）；部署前评估信任边界 |
 | 想不装模型先联调 | 把 `tts.backend` 设为 `fake`（文本到文本假后端），可无引擎、无麦克风跑通工具链路 |
 
@@ -251,13 +280,14 @@ dsh web
 
 | 方面 | 状态 |
 |---|---|
-| harness | 0.1.5-rc.2（peerDependencies 声明 `^0.1.5-rc.2`；0.1.2 起客户端节点引擎并入 `dsh-client-ui-conversation`/`dsh-client-ui-chat`，不再依赖 `dsh-client-runtime`）。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 Web 组合禁用了 host 平面的 `tool-jobs`（0.1.5-rc.2 里这条约束仍然生效）。 |
-| 会话事件 | `SessionEvent.ignorable` 是外部事件的兼容机制，但 `Session.append` 仍不给插件事件写入它的入口。0.1.5-rc.2 的持久化读路径遇到「未知且未标 `ignorable`」的事件会直接拒绝整份日志（`SESSION_FORMAT_VERSION` 已由 0 进到 3，并新增了内置事件类型清单）。`durableEvents` 保持默认 `false`；在插件事件持久化验证通过之前请勿开启。 |
+| harness | 0.1.7-rc.2（peerDependencies 声明 `^0.1.7-rc.2`，devDependencies 与 CI 锁在同一版；0.1.2 起客户端节点引擎并入 `dsh-client-ui-conversation`/`dsh-client-ui-chat`，不再依赖 `dsh-client-runtime`）。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 Web 组合禁用了 host 平面的 `tool-jobs`（在 0.1.7-rc.2 上依旧成立）。 |
+| 会话事件 | 这条限制是在 0.1.5-rc.6 上实测到的：持久化读路径遇到「未知且未标 `ignorable`」的事件会拒绝整份日志，而 `Session.append` 不给插件事件写入 `ignorable` 的入口。0.1.7-rc.2 一侧读到了内置事件清单与 `ignorable` 保留逻辑，但本插件**没有真机验证过开启后的历史可加载性**，所以 `durableEvents` 继续默认 `false`；验证通过前请勿开启。 |
 | 播放 | Windows：内置 `SoundPlayer`（已实测）。macOS：`afplay`。Linux：`aplay`（需安装 ALSA 工具）。`edge-tts` 只合成不播放——要听到声音请用本地 wav 后端。 |
 | 录音 | 仅 macOS（原生 + ffmpeg）。Windows/Linux 的 `transcribe({record})` 会明确提示不可用。 |
 | Shell 沙箱 | 本地引擎命令以显式 `danger-full-access` 策略运行——引擎二进制、GGUF 模型、音频目录跨越了受限沙箱模式无法覆盖的多个根。**部署前请评估此信任边界。** |
+| 写接口 | 四个改状态的端点（`/voice/call/answer`、`/voice/provision/{prepare,adopt,cancel,cleanup}`）先查 `Sec-Fetch-Site`，跨站的直接 403；没有这个头时退回比对 `Origin` 与 `Host`。宿主 webserver 本身不带任何鉴权（只有 gzip 中间件），`host` 还可以配成 `0.0.0.0`，所以这道门是浏览器攻击面上唯一的屏障。本机进程（curl 等）不带这些头，仍然可调用——回环端口没有共享密钥可查，这是明说的残余风险。 |
 | 来电卡片 | v0.2 走 webserver 路由缝隙（SSE `/voice/call/events` + `POST /voice/call/answer`，载荷即预留的 `VoiceAnswerPayload` 契约）；仅 web 组合可用，headless 自动回落弹窗/拒接。同源信任级别与音频路由一致。 |
-| 测试 | 95 个单元测试全绿（`pnpm test`）。 |
+| 测试 | 262 个单元/路由测试全绿（`pnpm test`）；`pnpm typecheck` 现在同时检查 `src/`、`src/client/` 和 `test/`——测试代码此前从不在类型检查范围内。 |
 
 ## 🛠 开发
 
@@ -272,7 +302,9 @@ pnpm test        # node --test
 
 - **v0.1** ✅ 已发布 npm（0.1.0）：通话域 + crispasr 后端 + 本地播放。
 - **v0.2** ✅ 专属来电卡片 UI（振铃动画、来电者身份）——`callMode: card`，走 webserver 路由缝隙，载荷与预留的 RPC 契约（`src/rpc/contract.ts`）逐字一致，未来可平移到真正的 connection-RPC。
-- **v0.3** —— 错过来电的语音信箱 + AI 已读回执（`src/domain/voicemail.ts`，事件类型已预留）。
+- **v0.3.0** ✅ 接听后的卡片留在屏上直到整段话说完（`active` 相位 + 后台任务对齐）。
+- **v0.3.5** ✅ 一键装配、11 条可选铃声与试听、一键清理，加上后端逐项复核（见上一节）。
+- **下一版** —— 错过来电的语音信箱 + AI 已读回执（`src/domain/voicemail.ts`，事件类型已预留）。
 - **v1.0** —— 冻结 schema，发布稳定版。
 
 ## 📄 许可证

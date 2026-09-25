@@ -51,13 +51,15 @@ export class CrispasrTtsBackend implements TtsBackend {
     readonly bin: string;
     readonly model: string;
     readonly codec: string;
+    /** The engine backend this talker needs; defaults to the 0.6B CustomVoice one. */
+    readonly backend?: string;
     /** Extra flags appended verbatim (e.g. `--gpu-backend cuda`). */
     readonly extraFlags?: readonly string[];
   };
 
   constructor(
     run: ShellRun,
-    options: { readonly bin: string; readonly model: string; readonly codec: string; readonly extraFlags?: readonly string[] },
+    options: { readonly bin: string; readonly model: string; readonly codec: string; readonly backend?: string; readonly extraFlags?: readonly string[] },
   ) {
     this.run = run;
     this.options = options;
@@ -96,15 +98,42 @@ export class CrispasrTtsBackend implements TtsBackend {
   }
 }
 
-/** Build the full crispasr command line for one synthesis. */
+/** Build the full crispasr command line for one synthesis (the string `ctx.shell` runs). */
 export function crispasrCommand(
-  options: { readonly bin: string; readonly model: string; readonly codec: string; readonly extraFlags?: readonly string[] },
+  options: CrispasrInvocation,
   input: { readonly text: string; readonly voice: string },
   dest: string,
 ): string {
-  const tokens: string[] = [
+  return buildCommandLine(crispasrArgv(options, input, dest));
+}
+
+/** Everything one synthesis needs to name the engine, its model pair and backend. */
+export interface CrispasrInvocation {
+  readonly bin: string;
+  readonly model: string;
+  readonly codec: string;
+  /**
+   * The engine backend. The 1.7B CustomVoice port is registered under its own
+   * name, so a model choice carries it; omitting it keeps the 0.6B default that
+   * every hand-written config today relies on.
+   */
+  readonly backend?: string;
+  readonly extraFlags?: readonly string[];
+}
+
+/**
+ * The same invocation as an argv list: `[bin, ...flags]`. The command string is
+ * for `ctx.shell`; the list is for a direct spawn and for the device probe —
+ * one definition of the engine's flags, two consumers.
+ */
+export function crispasrArgv(
+  options: CrispasrInvocation,
+  input: { readonly text: string; readonly voice: string },
+  dest: string,
+): string[] {
+  return [
     options.bin,
-    '--backend', 'qwen3-tts-customvoice',
+    '--backend', options.backend ?? 'qwen3-tts-customvoice',
     '-m', options.model,
     '--codec-model', options.codec,
     '--voice', input.voice,
@@ -112,5 +141,4 @@ export function crispasrCommand(
     '--tts-output', dest,
     ...(options.extraFlags ?? []),
   ];
-  return buildCommandLine(tokens);
 }

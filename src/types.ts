@@ -6,7 +6,28 @@
  *
  * @module dsh-voice-call/types
  */
+import type { ContextFormed } from '@deepseek-ai/dsh-llm';
 import type { SttBackendId, TtsBackendId } from './backends/types.ts';
+import { DEFAULT_PALETTE, DEFAULT_THEME, paletteById, type CardTheme, type PaletteId } from './client/palettes.ts';
+import { toneById, type ToneId } from './client/tones.ts';
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /**
+     * One voice-domain message produced by this plugin: a spoken-leg failure
+     * notice, or a dictated transcript delivered as the human's own words.
+     * 0.1.7 retired the shared `plugin` source kind — `MessageSourceMap` is a
+     * merge-extensible sum type and every producer declares its own `kind`,
+     * with consumers falling through unknowns (dsh-llm `message.d.ts:94-100`).
+     * @mode emit
+     */
+    'voice-call': {
+      readonly kind: 'voice-call';
+      /** The producing plugin, kept for log forensics. */
+      readonly plugin: 'dsh-voice-call';
+    } & ContextFormed;
+  }
+}
 
 /**
  * A durable reference to one audio artifact under {@link AudioStore} root.
@@ -33,6 +54,13 @@ export interface CrispasrEngineConfig {
   readonly model?: string;
   /** Path to the codec/tokenizer GGUF, e.g. `qwen3-tts-tokenizer-12hz-q8_0.gguf`. */
   readonly codec?: string;
+  /**
+   * The engine backend to invoke. Absent means `qwen3-tts-customvoice`; the 1.7B
+   * port registers under its own backend name, so a model choice carries it.
+   * Set it only together with a matching `model` — the pairing is what the
+   * engine checks.
+   */
+  readonly backend?: string;
 }
 
 /**
@@ -52,6 +80,26 @@ export interface CallCardConfig {
   readonly callerName: string;
   /** How long the card rings before the call settles as `missed`. @default 30000 */
   readonly ringTimeoutMs: number;
+  /**
+   * Which theme half the card renders in. `system` follows the host's own
+   * `data-ds-dark-theme` attribute live; `light`/`dark` pin it against the host.
+   * @default 'system'
+   */
+  readonly theme: CardTheme;
+  /** The card's accent preset; see `src/palettes.ts`. @default 'azure' */
+  readonly palette: PaletteId;
+  /**
+   * Play the bundled ringtone while a card is unanswered. Off leaves the card
+   * visual-only, which is what a shared room wants. @default true
+   */
+  readonly ringtone: boolean;
+  /**
+   * Which of the bundled ringtones `ringtone` plays. See `src/client/tones.ts`;
+   * an unknown id resolves to `classic`, the sound every install has shipped
+   * with, so a typo in a hand-written profile degrades rather than silences.
+   * @default 'classic'
+   */
+  readonly tone: ToneId;
 }
 
 /** Plugin config as resolved by {@link resolveConfig} (defaults applied). */
@@ -148,7 +196,7 @@ export interface VoiceConfigInput {
   readonly readReplies?: boolean;
   readonly durableEvents?: boolean;
   readonly callMode?: CallMode;
-  readonly callCard?: { readonly callerName?: string; readonly ringTimeoutMs?: number };
+  readonly callCard?: { readonly callerName?: string; readonly ringTimeoutMs?: number; readonly theme?: CardTheme; readonly palette?: string; readonly ringtone?: boolean; readonly tone?: string };
   readonly audioDir?: string;
   readonly voicemail?: { readonly enabled?: boolean };
   readonly readReceipts?: { readonly enabled?: boolean };
@@ -179,6 +227,16 @@ export function resolveConfig(raw: VoiceConfigInput | undefined): VoiceConfig {
     callCard: {
       callerName: raw?.callCard?.callerName ?? 'DeepSeek',
       ringTimeoutMs: raw?.callCard?.ringTimeoutMs ?? 30_000,
+      theme: raw?.callCard?.theme ?? DEFAULT_THEME,
+      palette: paletteById(raw?.callCard?.palette).id,
+      // Absent means "on": the ringtone is the behaviour every version of this
+      // plugin has promised, and a config written before the flag existed
+      // should not silently become the quiet one.
+      ringtone: raw?.callCard?.ringtone ?? true,
+      // Resolved through the table rather than trusted: `assets/ringtone.wav` is
+      // the same bytes as the `classic` entry, so an install that never touched
+      // this field rings exactly as it did before the picker existed.
+      tone: toneById(raw?.callCard?.tone).id,
     },
     audioDir: raw?.audioDir ?? '',
     ...(raw?.voicemail !== undefined ? { voicemail: raw.voicemail } : {}),
@@ -269,4 +327,11 @@ export interface OfferCallOutput {
 export interface RecordedMedia {
   readonly file: string;
   readonly durationMs?: number;
+  /**
+   * Delete the recording when the caller is done with it. The recorders write
+   * raw microphone audio into the OS temp dir, and the artifact store keeps its
+   * own copy of whatever was kept — so without this, every transcription of a
+   * recording leaves a second, permanent copy of what somebody said out loud.
+   */
+  readonly discard?: () => Promise<void>;
 }

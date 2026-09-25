@@ -8,5 +8,8 @@ lib/
 .dsh-home/
 .pnpm-store/
 
+# Regenerable design scratch (ringtone audition page)
+design/
+
 # Local verification artifacts (screenshots, boot logs, profile snapshots)
 .verify-backup/

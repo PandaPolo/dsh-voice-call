@@ -109,6 +109,22 @@ export class AudioStore {
   }
 }
 
+/**
+ * The check a caller-supplied audio path has to pass, phrased so the refusal is
+ * actionable. {@link AudioStore.resolve} holds the rule; this adds the way out,
+ * because the message is what the agent reads back.
+ */
+export function confineAudioInput(root: string, file: string): string {
+  try {
+    return new AudioStore(root).resolve(file);
+  } catch {
+    throw new Error(
+      `dsh-voice: source.file has to sit inside the audio directory (${root}). `
+      + 'Move the audio there first, or use source.record to capture it.',
+    );
+  }
+}
+
 /** True when the path lies under the audio root (used by the web route). */
 export function isUnderRoot(root: string, candidate: string): boolean {
   const r = resolve(root);

@@ -10,8 +10,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import type { JobId, JobStart } from '@deepseek-ai/dsh-jobs';
+import type { JobId, JobSpec } from '@deepseek-ai/dsh-jobs';
 import { FakeSttBackend, FakeTtsBackend, fakeTranscriptFrom } from '../src/backends/fake.ts';
+import { confineAudioInput } from '../src/audio.ts';
 import { runTranscribe, type TranscribeDeps } from '../src/tools/transcribe.ts';
 import { startSpeakJob, type SpeakDeps } from '../src/tools/speak.ts';
 import type { AudioRef, VoiceNoteData } from '../src/types.ts';
@@ -69,6 +70,9 @@ describe('transcribe pipeline with the fake backend', () => {
       let committed: AudioRef | undefined;
 
       const deps: TranscribeDeps = {
+        // The real rule, not a stub: the fixture this test writes sits inside the
+        // same directory the pipeline is allowed to read from.
+        confine: (file) => confineAudioInput(dir, file),
         stt: new FakeSttBackend(),
         record: async () => { throw new Error('record should not be called for file input'); },
         commit: async (file, name) => {
@@ -104,6 +108,9 @@ describe('transcribe pipeline with the fake backend', () => {
       await writeFile(recorded, JSON.stringify({ transcript: 'check the logs' }), 'utf8');
       const notes: VoiceNoteData[] = [];
       const deps: TranscribeDeps = {
+        // The real rule, not a stub: the fixture this test writes sits inside the
+        // same directory the pipeline is allowed to read from.
+        confine: (file) => confineAudioInput(dir, file),
         stt: new FakeSttBackend(),
         record: async (seconds) => {
           assert.equal(seconds, 4);
@@ -123,12 +130,55 @@ describe('transcribe pipeline with the fake backend', () => {
     });
   });
 
+  it('hands the recorder’s temp copy back, whether or not the turn survived', async () => {
+    await withTempDir(async (dir) => {
+      const captured = join(dir, 'take.m4a');
+      const depsFor = (transcribe: () => Promise<{ transcript: string }>): TranscribeDeps & { discarded: () => number } => {
+        let discarded = 0;
+        return {
+          stt: { id: 'fake', transcribe: async () => ({ ...await transcribe(), backend: 'fake' as const }) },
+          record: async () => ({
+            file: captured,
+            durationMs: 4000,
+            discard: async () => {
+              discarded += 1;
+            },
+          }),
+          commit: async (file, name) => ({ path: join(dir, name), mime: 'audio/mp4' }),
+          confine: (file) => file,
+          appendNote: () => {},
+          deliverToPeer: async () => undefined,
+          deliverUserMessage: () => {},
+          coords: () => ({ turn: 1, step: 1 }),
+          discarded: () => discarded,
+        };
+      };
+      // The claim is not that the audio gets transcribed. It is that a raw
+      // microphone capture does not stay in the OS temp dir forever, because the
+      // pipeline copies it into the store and nobody will ever read the original
+      // again — including when the run fails on the way.
+      const ok = depsFor(async () => ({ transcript: 'say it again' }));
+      const output = await runTranscribe(ok, { source: { record: { seconds: 4 } } });
+      assert.equal(output.transcript, 'say it again');
+      assert.equal(output.durationMs, 4000);
+      assert.equal(ok.discarded(), 1);
+
+      const bad = depsFor(async () => {
+        throw new Error('no speech');
+      });
+      await assert.rejects(runTranscribe(bad, { source: { record: { seconds: 4 } } }), /no speech/);
+      assert.equal(bad.discarded(), 1, 'a failed transcription is not a reason to keep what was said');
+    });
+  });
   it('delivers to a crosstalk peer when `to` is given instead of injecting a user message', async () => {
     await withTempDir(async (dir) => {
       const fixture = join(dir, 'note.m4a');
       await writeFile(fixture, JSON.stringify({ transcript: 'hello other session' }), 'utf8');
       const delivered: string[] = [];
       const deps: TranscribeDeps = {
+        // The real rule, not a stub: the fixture this test writes sits inside the
+        // same directory the pipeline is allowed to read from.
+        confine: (file) => confineAudioInput(dir, file),
         stt: new FakeSttBackend(),
         record: async () => { throw new Error('unused'); },
         commit: async (file, name) => ({ path: join(dir, name), mime: 'audio/mp4' }),
@@ -153,7 +203,7 @@ describe('speak job with the fake backend', () => {
     await withTempDir(async (dir) => {
       const dest = join(dir, 'voice-speak-x.m4a');
       const notes: VoiceNoteData[] = [];
-      let started: JobStart | undefined;
+      let started: JobSpec | undefined;
 
       const deps: SpeakDeps = {
         tts: new FakeTtsBackend(),
@@ -207,11 +257,14 @@ describe('speak job with the fake backend', () => {
     });
   });
 
-  it('stamps the owning agent onto the job spec (rc.6 web jobs need an owner)', async () => {
+  it('stamps the owning session onto the job spec (web jobs need an owner)', async () => {
     await withTempDir(async (dir) => {
       const dest = join(dir, 'voice-speak-owned.m4a');
-      let started: JobStart | undefined;
-      const agent = { id: 'session-owned' } as unknown as Agent;
+      let started: JobSpec | undefined;
+      // Since 0.1.7 `JobSpec.owner` is a SessionId, not the agent: the runtime
+      // resolves the live agent registered under it and cancels the job when
+      // that agent is disposed.
+      const agent = { session: { id: 'session-owned' } } as unknown as Agent;
       const deps: SpeakDeps = {
         tts: new FakeTtsBackend(),
         startJob: (spec) => {
@@ -227,7 +280,7 @@ describe('speak job with the fake backend', () => {
       };
       const handle = startSpeakJob(deps, { text: 'owned job' });
       await handle.settled;
-      assert.equal(started?.owner, agent);
+      assert.equal(started?.owner, 'session-owned');
     });
   });
 });

@@ -16,6 +16,10 @@ function voiceNoteEvent(data: VoiceNoteEventData, seq = 42): { type: 'voice/note
   return { type: 'voice/note', seq, time: 1723600000000, data };
 }
 
+/** One of our events as the matcher receives it: same payload, the engine's own
+ *  branded sequence number, which a test literal cannot mint. */
+const logged = (event: ReturnType<typeof voiceNoteEvent>): Parameters<typeof voiceNoteDefinition.match>[0] => event as Parameters<typeof voiceNoteDefinition.match>[0];
+
 function startMatch(event: ReturnType<typeof voiceNoteEvent>): ConversationMatch {
   return {
     event: event as never,
@@ -25,7 +29,10 @@ function startMatch(event: ReturnType<typeof voiceNoteEvent>): ConversationMatch
 }
 
 function contextFor(event: ReturnType<typeof voiceNoteEvent>): ConversationNodeContext<VoiceNoteState> {
-  const match = startMatch(event);
+  // `ConversationMatch` is the union over the roles, and a node's `start` slot
+  // takes only the opening one — the annotation on the helper says the union
+  // because that is what the literal widens to.
+  const match = startMatch(event) as Extract<ConversationMatch, { role: 'start' }>;
   const state = voiceNoteDefinition.start({ key: 'voice-note', kind: 'voice-note', id: event.data.noteId, matches: [match], start: match, state: undefined, current: new Map() }, match, { previous: () => undefined });
   return {
     key: 'voice-note',
@@ -50,7 +57,7 @@ describe('voice-note Definition', () => {
   });
 
   it('matches only voice/note events and extracts the stable note id', () => {
-    assert.deepEqual(voiceNoteDefinition.match(event), { id: 'voice-abc123', role: 'start' });
+    assert.deepEqual(voiceNoteDefinition.match(logged(event)), { id: 'voice-abc123', role: 'start' });
     assert.equal(voiceNoteDefinition.match({ type: 'user/message', seq: 1, time: 0, data: {} } as never), null);
   });
 
@@ -62,8 +69,12 @@ describe('voice-note Definition', () => {
     assert.equal(node.target, 'chat');
     assert.equal(node.id, 'voice-abc123');
     assert.equal(node.key, 'voice-note');
-    assert.equal(node.anchorSeq, 42);
-    assert.equal((node as { visibility: string }).visibility, 'visible');
+    // `anchorSeq` and `visibility` are fields this plugin adds to its own view
+    // node; the host's declared node type stops at what it consumes itself, so
+    // the two reads are named once here instead of cast at each assertion.
+    const card = node as typeof node & { anchorSeq: number; visibility: string };
+    assert.equal(card.anchorSeq, 42);
+    assert.equal(card.visibility, 'visible');
     const data = node.data as VoiceNoteState;
     assert.equal(data.noteId, 'voice-abc123');
     assert.equal(data.direction, 'in');
@@ -95,7 +106,10 @@ describe('voice-note Definition', () => {
 
   it('publishes step location data for the owning step', () => {
     const ctx = contextFor(event);
-    const loc = voiceNoteDefinition.buildLocationData!(ctx, 'step');
+    // The host hands a node the scope's previously published data so it can
+    // diff against it; this card is static, so `null` is both what the first call
+    // gets and all this one looks at.
+    const loc = voiceNoteDefinition.buildLocationData!(ctx, 'step', null);
     assert.deepEqual(loc, {
       kind: 'step',
       turn: 2,

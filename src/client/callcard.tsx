@@ -14,6 +14,11 @@
  * an already-settled POST answer reports `ok: false` and the client dismisses
  * without a retry loop.
  *
+ * An unanswered ring also has to be heard, so the overlay owns one looping
+ * `Audio` over the `/voice/call/ringtone` asset — started with the first
+ * unanswered card, stopped by 接听/拒接/timeout, and quiet when the config says
+ * so or when the card's own 静音 is pressed. The rules live in `ringtone.ts`.
+ *
  * Everything below `CallCard` is presentation only. `CARD_STYLES` is scoped to
  * `.dsvc-*` class names and resolves every colour through a two-tier token
  * layer: the host's `--dsw-alias-*` design tokens first, then a literal that
@@ -29,6 +34,9 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import ReactDOM from 'react-dom';
+import { paletteStyles, themeDecls } from './palettes.ts';
+import { getAppearance, setAppearance, subscribeAppearance } from './appearance.ts';
+import { browserRinger } from './ringtone.ts';
 import {
   answerCallOnHost,
   connectCallEvents,
@@ -95,11 +103,48 @@ export function CallCardOverlay(): ReactNode {
   const [failedIds, setFailedIds] = useState<readonly string[]>([]);
   const [held, setHeld] = useState<readonly HeldCall[]>([]);
   const [now, setNow] = useState(() => Date.now());
+  const [appearance, setShown] = useState(getAppearance);
+  // One ringtone loop for the whole stack — several cards ringing at once are
+  // one caller, not a chord. Lazy: nothing is created until a card rings.
+  const [ringer] = useState(browserRinger);
+  const [muted, setMuted] = useState(false);
+  // Only a real pin sets the attribute: 跟随系统 stays a pure CSS concern, keyed
+  // off the host's own body attribute, so an OS flip repaints live without this
+  // component observing anything.
+  const pinnedTheme = appearance.theme === 'system' ? undefined : appearance.theme;
+
+  // The settings card and this overlay live in the same bundle, so an accepted
+  // config write repaints a card that is already on screen — no reload, and no
+  // waiting for the next ring to see the palette you just picked.
+  useEffect(() => subscribeAppearance(() => setShown(getAppearance())), []);
+  useEffect(() => ringer.setEnabled(appearance.ringtone), [appearance.ringtone]);
+  // Which ringtone, as well as whether: the settings card writes the same store
+  // this reads, so a card already on screen loops the new tone on its next round.
+  useEffect(() => ringer.setTone(appearance.tone), [appearance.tone]);
+  useEffect(() => ringer.setMuted(muted), [muted]);
+  useEffect(() => () => ringer.dispose(), []);
+
+  // A card stops ringing the moment the human touches one of its buttons, not
+  // when the host's `active`/`settled` event comes back: the round trip is a few
+  // hundred ms, and a ringtone still looping after 接听 is the sound of a plugin
+  // that did not hear you.
+  const anyRinging = calls.some((call) => call.phase === 'ringing'
+    && !acceptedIds.includes(call.callId) && !busyIds.includes(call.callId));
+  useEffect(() => {
+    ringer.setRinging(anyRinging);
+    // 静音 is per-call: once nothing is ringing, the next caller deserves the
+    // ringtone the config still asks for.
+    if (!anyRinging) setMuted(false);
+  }, [anyRinging]);
 
   useEffect(() => {
     // Boot catch-up: a page opened mid-ring — or mid-call — replays the live
-    // table before the stream's own replay arrives.
-    void fetchLiveCalls().then(setCalls).catch(() => {});
+    // table before the stream's own replay arrives. The same response carries
+    // the server's resolved appearance, which seeds the store for this page.
+    void fetchLiveCalls().then(({ calls: live, appearance: seeded }) => {
+      if (seeded !== undefined) setAppearance(seeded);
+      setCalls(live);
+    }).catch(() => {});
     // Ringing and active payloads describe the same call: replace in place so
     // the card does not jump to the top of the stack when it is answered.
     const upsert = (call: CallCardRingState): void => {
@@ -175,8 +220,12 @@ export function CallCardOverlay(): ReactNode {
   if (calls.length === 0) return null;
   const hidden = Math.max(0, calls.length - MAX_CARDS);
   return (
-    <div className="dsvc-stack">
+    <div className="dsvc-stack"
+      data-dsvc-theme={pinnedTheme}
+      data-dsvc-palette={appearance.palette}>
       <style>{CARD_STYLES}</style>
+      <style>{PALETTE_CSS}</style>
+      {anyRinging ? <RingtoneToggle muted={muted} onToggle={() => setMuted((was) => !was)} /> : null}
       {calls.slice(0, MAX_CARDS).map((call) => (
         <CallCard key={call.callId} call={call} now={now}
           busy={busyIds.includes(call.callId)}
@@ -283,6 +332,26 @@ export function CallCard(props: {
   );
 }
 
+/**
+ * The ringtone toggle. Its own component so the offline preview can render the
+ * real thing rather than a copy of its markup; the overlay only decides whether
+ * a ring is currently worth muting.
+ */
+export function RingtoneToggle(props: { readonly muted: boolean; readonly onToggle: () => void }): ReactNode {
+  return (
+    // `data-muted` rather than the `[aria-pressed="true"]` selector it would
+    // otherwise need: React stringifies aria-* into "true"/"false" while other
+    // renderers drop the value, and a style that keys off that difference is a
+    // style that silently stops applying.
+    <button type="button" className="dsvc-mute" onClick={props.onToggle}
+      aria-pressed={props.muted} data-muted={props.muted ? '' : undefined}
+      title={props.muted ? '恢复铃声' : '本次来电静音'}>
+      {props.muted ? <MuteIcon /> : <SpeakerIcon />}
+      <span>{props.muted ? '铃声已关' : '静音'}</span>
+    </button>
+  );
+}
+
 /** Call duration as `m:ss`. */
 function clock(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -327,6 +396,26 @@ function ClockIcon(): ReactNode {
   );
 }
 
+/** Speaker with sound — the ringtone is on, and this button turns it off. */
+function SpeakerIcon(): ReactNode {
+  return (
+    <Glyph>
+      <path d="M11 5 6 9H3v6h3l5 4V5z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+    </Glyph>
+  );
+}
+
+/** Speaker with the waves struck through — the ringtone is off for this call. */
+function MuteIcon(): ReactNode {
+  return (
+    <Glyph>
+      <path d="M11 5 6 9H3v6h3l5 4V5z" />
+      <path d="M22 9l-6 6M16 9l6 6" />
+    </Glyph>
+  );
+}
+
 /** Triangle exclamation — the failed-answer glyph. */
 function AlertIcon(): ReactNode {
   return (
@@ -337,28 +426,21 @@ function AlertIcon(): ReactNode {
   );
 }
 
-const CARD_STYLES = `
+/**
+ * The palette layer, emitted once for every preset — the stack's attribute
+ * picks which one applies, so a card already on screen repaints on change.
+ */
+const PALETTE_CSS = paletteStyles();
+
+/** Exported for the offline preview harness, which renders the real stylesheet. */
+export const CARD_STYLES = `
 .dsvc-stack {
-  /* ---------- token layer: light ----------
-     Every value reads a host design token first. The literals are the colours
-     those tokens resolve to in the host's own light palette, so a host that
-     never registers them still gets a correct card. The dark half of each pair
-     lives in the body[data-ds-dark-theme] block below. */
-  --dsvc-fg: var(--dsw-alias-label-primary, #0f1115);
-  --dsvc-fg-2: var(--dsw-alias-label-secondary, #61666b);
-  --dsvc-fg-3: var(--dsw-alias-label-tertiary, #81858c);
-  --dsvc-line: var(--dsw-alias-border-l2, #0000001a);
-  --dsvc-surface: var(--dsw-alias-bg-layer-2, #ffffff);
-  --dsvc-fill: var(--dsw-alias-interactive-bg-active, #2631481a);
-  --dsvc-fill-hover: var(--dsw-alias-interactive-bg-hover-accent, #26314824);
-  --dsvc-accent: var(--dsw-alias-link, #4176e6);
-  --dsvc-accent-wash: var(--dsw-alias-state-business-tertiary, #e4edfd);
-  --dsvc-accent-ink: var(--dsw-alias-label-primary-foreground, #ffffff);
-  --dsvc-accent-glow: #4176e64d;
-  --dsvc-hangup: var(--dsw-alias-state-error-primary, #ec1313);
-  --dsvc-hangup-wash: var(--dsw-alias-interactive-bg-hover-danger, #ec13130d);
-  --dsvc-topline: inset 0 1px 0 #ffffff;
-  --dsvc-shadow: 0 14px 34px -10px #0f11152e, 0 2px 6px #0f111514;
+  /* ---------- token layer: light, following the host ----------
+     Every value reads a host design token first; the literals are what those
+     tokens resolve to in the host's own light palette, so a host that never
+     registers them still gets a correct card. The values live in
+     src/client/palettes.ts, which generates this block and its three siblings. */
+${themeDecls('light', true)}
   --dsvc-ease: cubic-bezier(0.22, 0.85, 0.28, 1);
   --dsvc-ring: 1.9s;
 
@@ -366,27 +448,27 @@ const CARD_STYLES = `
   display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
   font-family: inherit; color: var(--dsvc-fg);
 }
-/* ---------- token layer: dark ----------
+/* ---------- token layer: dark, following the host ----------
      The host's ThemePresenter owns data-ds-dark-theme on <body>, resolves the
      system preference against prefers-color-scheme, and re-emits the snapshot
-     when the OS flips — so keying the dark half off that attribute is what
-     makes 跟随系统 work live, with no reload and no duplicated media query here. */
-body[data-ds-dark-theme] .dsvc-stack {
-  --dsvc-fg: var(--dsw-alias-label-primary, #f9fafb);
-  --dsvc-fg-2: var(--dsw-alias-label-secondary, #cfd3d6);
-  --dsvc-fg-3: var(--dsw-alias-label-tertiary, #adb2b8);
-  --dsvc-line: var(--dsw-alias-border-l2, #ffffff1f);
-  --dsvc-surface: var(--dsw-alias-bg-layer-2, #2c2c2e);
-  --dsvc-fill: var(--dsw-alias-interactive-bg-active, #ffffff24);
-  --dsvc-fill-hover: var(--dsw-alias-interactive-bg-hover-accent, #ffffff3d);
-  --dsvc-accent: var(--dsw-alias-link, #679efe);
-  --dsvc-accent-wash: var(--dsw-alias-state-business-tertiary, #34415b);
-  --dsvc-accent-ink: var(--dsw-alias-label-primary-foreground, #0f1115);
-  --dsvc-accent-glow: #679efe4d;
-  --dsvc-hangup: var(--dsw-alias-state-error-primary, #f25a5a);
-  --dsvc-hangup-wash: var(--dsw-alias-interactive-bg-hover-danger, #f25a5a26);
-  --dsvc-topline: inset 0 1px 0 #ffffff12;
-  --dsvc-shadow: 0 18px 44px -12px #000000a6;
+     when the OS flips — so keying off that attribute is what makes 跟随系统 work
+     live, with no reload and no duplicated media query here. A pinned card opts
+     out by carrying data-dsvc-theme, which is why the :not() guard is on the
+     ATTRIBUTE and not on a value. */
+body[data-ds-dark-theme] .dsvc-stack:not([data-dsvc-theme]) {
+${themeDecls('dark', true)}
+}
+/* ---------- pinned themes ----------
+     A pinned half cannot read host tokens at all: the host only re-points them
+     under its own dark attribute, so a card pinning dark inside a light host
+     would get light values back. These two blocks therefore use the literal
+     tier, and the overlay resolves the system mode against the host attribute itself
+     (see CallCardOverlay) so that only a real pin sets the attribute. */
+.dsvc-stack[data-dsvc-theme="dark"] {
+${themeDecls('dark', false)}
+}
+body[data-ds-dark-theme] .dsvc-stack[data-dsvc-theme="light"] {
+${themeDecls('light', false)}
 }
 
 .dsvc-more {
@@ -395,6 +477,25 @@ body[data-ds-dark-theme] .dsvc-stack {
   border: 1px solid var(--dsvc-line); border-radius: 999px;
   padding: 4px 11px; box-shadow: var(--dsvc-shadow);
 }
+
+/* ---------- the mute toggle ----------
+   Out of flow on purpose: the stack is bottom-anchored, so a control in the
+   normal flow would shove every card already on screen downward. A pill above
+   the newest card, small and quiet, so the primary actions keep all the weight. */
+.dsvc-mute {
+  position: absolute; right: 0; bottom: calc(100% + 8px);
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: inherit; font-size: 11px; font-weight: 500; line-height: 1;
+  color: var(--dsvc-fg-2); background: var(--dsvc-surface);
+  border: 1px solid var(--dsvc-line); border-radius: 999px;
+  padding: 6px 11px 6px 9px; cursor: pointer;
+  box-shadow: var(--dsvc-shadow);
+  transition: color 170ms ease, border-color 170ms ease, background-color 170ms ease;
+}
+.dsvc-mute svg { font-size: 13px; flex: none; opacity: 0.85; }
+.dsvc-mute:hover { color: var(--dsvc-fg); border-color: var(--dsvc-accent); }
+.dsvc-mute:focus-visible { outline: 2px solid var(--dsvc-accent); outline-offset: 2px; }
+.dsvc-mute[data-muted] { color: var(--dsvc-hangup); border-color: var(--dsvc-hangup); }
 
 /* ---------- card ---------- */
 .dsvc-card {

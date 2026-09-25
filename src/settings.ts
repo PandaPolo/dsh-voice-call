@@ -1,87 +1,29 @@
 /**
- * dsh-voice settings: the `voice` namespace under the user-settings seam.
- * Users edit `stt` / `tts` / `readReplies` / `audioDir` from their profile
- * patch or the settings UI; the plugin keeps reading the live resolved
- * source so a change reaches the very next tool call.
+ * dsh-voice-call settings: the live-config read contract.
+ *
+ * 0.1.7 removed the `SettingsProvider.installSection` seam this module used to
+ * hang its config off. The loader now owns the plugin's exported `Config`, and
+ * the profile patch is the single source of truth, so nothing is registered
+ * here any more — what remains is the *liveness* contract:
+ *
+ * - a field the schema marks `.volatile()` arrives in `apply()`'s config as a
+ *   cosmokit live reference, so re-resolving on every read is what carries a
+ *   settings-UI change into the next tool call;
+ * - a field without that mark is fixed until the plugin reloads, and the host
+ *   refuses a form write to it (`has no volatile fields` / `is not volatile`).
  *
  * @module dsh-voice/settings
  */
-import type { Context } from '@deepseek-ai/cordis';
-import type { SettingsProvider } from '@deepseek-ai/dsh-settings';
-import z from '@deepseek-ai/schemastery';
-import { resolveConfig } from './types.ts';
+import { plainConfig } from './plain.ts';
 import type { VoiceConfig, VoiceConfigInput } from './types.ts';
-
-/** The `voice` settings namespace. */
-export const NS = 'voice' as const;
-
-const backendSchema = (options: readonly string[]) => z.union([...options]);
-
-/** Plugin config schema (all fields optional; defaults in {@link resolveConfig}). */
-export const Config = z.object({
-  stt: z.object({
-    backend: backendSchema(['whisper-local', 'openai', 'macos', 'fake']),
-    model: z.string(),
-    whisperLocal: z.object({
-      bin: z.string(),
-      model: z.string(),
-    }),
-    openai: z.object({
-      baseUrl: z.string(),
-      apiKeyEnv: z.string().role('credential-ref'),
-    }),
-  }),
-  tts: z.object({
-    backend: backendSchema(['say', 'piper', 'edge-tts', 'fake', 'crispasr']),
-    voice: z.string(),
-    rate: z.number().min(1).max(600),
-    piper: z.object({
-      bin: z.string(),
-      model: z.string(),
-    }),
-    edgeTts: z.object({
-      voice: z.string(),
-    }),
-    crispasr: z.object({
-      bin: z.string(),
-      model: z.string(),
-      codec: z.string(),
-    }),
-  }),
-  readReplies: z.boolean().default(false),
-  // Must mirror index.ts Config: appending voice/* session events poisons
-  // history loading on harness builds without plugin-event support.
-  durableEvents: z.boolean().default(false),
-  callMode: z.union(['ask', 'card', 'direct', 'off']).default('ask'),
-  callCard: z.object({
-    callerName: z.string(),
-    ringTimeoutMs: z.number().min(1000).max(600_000),
-  }),
-  audioDir: z.string(),
-  // Reserved for v0.3 — accepted now so configs written against v0.1 keep loading.
-  voicemail: z.object({ enabled: z.boolean() }),
-  readReceipts: z.object({ enabled: z.boolean() }),
-});
+import { resolveConfig } from './types.ts';
 
 /**
- * Install the settings wiring: while a settings service exists, register the
- * namespace with the plugin's composition entry as base and point the source
- * thunk at the resolved scope; otherwise fall back to the entry.
- * @param onChange - invoked after any attach/detach/commit so the plugin can
- *   re-judge derived state (audio root, route registrations).
- * @returns a thunk returning the current effective config.
+ * Build the plugin's effective-config thunk.
+ * @param entry - the parsed `Config` the loader handed to `apply()`.
+ * @returns a thunk resolving the current config on every call, so volatile
+ *   fields are read fresh and never cached.
  */
-export function installVoiceSettings(ctx: Context, entry: VoiceConfigInput, onChange?: () => void): () => VoiceConfig {
-  let current: () => VoiceConfig = () => resolveConfig(entry);
-  const provider = ctx.get('settings') as SettingsProvider | undefined;
-  provider?.installSection(ctx, NS, Config, resolveConfig(entry), {
-    setSource: (source) => {
-      current = () => resolveConfig(source() as VoiceConfigInput);
-    },
-    onChange: () => {
-      current();
-      onChange?.();
-    },
-  });
-  return current;
+export function voiceConfigSource(entry: VoiceConfigInput | undefined): () => VoiceConfig {
+  return () => resolveConfig(plainConfig(entry) as VoiceConfigInput | undefined);
 }

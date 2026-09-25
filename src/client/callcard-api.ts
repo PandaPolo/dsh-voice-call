@@ -61,12 +61,22 @@ export async function answerCallOnHost(payload: VoiceAnswerPayload): Promise<Voi
   return await response.json() as VoiceAnswerResult;
 }
 
-/** Fetch the live call table (boot catch-up without SSE): ringing and active legs. */
-export async function fetchLiveCalls(): Promise<CallCardRingState[]> {
+/** The card's server-resolved presentation, carried by the state snapshot. */
+export interface CallCardAppearance {
+  readonly theme: 'system' | 'light' | 'dark';
+  readonly palette: string;
+  /** Play a ringtone while a card is ringing. */
+  readonly ringtone: boolean;
+  /** Which of the bundled ringtones the above plays (`src/client/tones.ts`). */
+  readonly tone?: string;
+}
+
+/** Fetch the live call table (boot catch-up without SSE) and the card appearance. */
+export async function fetchLiveCalls(): Promise<{ calls: CallCardRingState[]; appearance?: CallCardAppearance }> {
   const response = await fetch('/voice/call/state', { headers: { accept: 'application/json' } });
-  if (!response.ok) return [];
-  const body = await response.json() as { calls?: readonly CallCardRingState[] };
-  return [...(body.calls ?? [])];
+  if (!response.ok) return { calls: [] };
+  const body = await response.json() as { calls?: readonly CallCardRingState[]; appearance?: CallCardAppearance };
+  return { calls: [...(body.calls ?? [])], ...(body.appearance !== undefined ? { appearance: body.appearance } : {}) };
 }
 
 /** The live-event handlers the overlay registers. */

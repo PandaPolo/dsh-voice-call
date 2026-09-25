@@ -13,15 +13,27 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import { mountCallCard } from './callcard.tsx';
+import { BUNDLE_NAME, VoiceCallSettingsCard } from './settings.tsx';
 import { voiceNoteDefinition } from './definition.ts';
 import { VoiceNoteView } from './view.tsx';
 
 /** Services the client plugin needs: the Definition registry and slots. */
 export const inject = ['uiConversation', 'slots'] as const;
 
+/** The client-side config-form service, over the face this plugin uses. */
+interface ConfigFormsService {
+  get(entryId: string): import('./settings.tsx').ConfigFormHandle;
+}
+
 /** Structural view of the `slots` service (browser slot registry). */
 interface SlotRegistry {
-  register(meta: { readonly name: string; readonly key: string; readonly locale?: string }, component: unknown): void;
+  register(meta: {
+    readonly name: string;
+    readonly key: string;
+    readonly locale?: string;
+    /** Values merged into the contribution's props on every render. */
+    readonly inject?: () => unknown;
+  }, component: unknown): void;
   inject(name: string, contributor: () => void): () => void;
 }
 
@@ -40,4 +52,25 @@ export function apply(ctx: Context): void {
   // The call-card overlay rides its own transport (`/voice/call` routes); it
   // degrades independently — no webserver routes, no card, v0.1 keeps working.
   ctx.effect(() => mountCallCard(), 'call-card overlay');
+  // The plugin page's configuration card, keyed by this bundle's package name.
+  // It rides `ctx.inject(['configForms'])` for the same reason the web routes do
+  // on the server: the settings service may boot after this bundle, and a host
+  // without a settings UI must simply never show the card. The card takes its
+  // write handle from that service because the host renders this slot without
+  // one (see `settings.tsx`).
+  ctx.inject(['configForms'], (scoped) => {
+    const forms = (scoped as unknown as { configForms?: ConfigFormsService }).configForms;
+    const slotsOfScoped = (scoped as unknown as { slots?: SlotRegistry }).slots ?? slots;
+    if (forms === undefined || slotsOfScoped === undefined) return;
+    try {
+      const handle = forms.get(BUNDLE_NAME);
+      slotsOfScoped.inject('plugins.bundle.config', () => slotsOfScoped.register({
+        name: 'plugins.bundle.config',
+        key: BUNDLE_NAME,
+        inject: () => ({ configForm: handle }),
+      }, VoiceCallSettingsCard));
+    } catch (error) {
+      console.warn('dsh-voice-call: the host has no plugin configuration slot — settings card disabled', error);
+    }
+  });
 }

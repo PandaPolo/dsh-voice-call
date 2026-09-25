@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { Context } from '@deepseek-ai/cordis';
 import { AudioStore } from '../src/audio.ts';
-import { CrispasrTtsBackend, CUSTOMVOICE_SPEAKERS, buildCommandLine, quoteForShell } from '../src/backends/crispasr.ts';
+import { CrispasrTtsBackend, CUSTOMVOICE_SPEAKERS, buildCommandLine, crispasrArgv, crispasrCommand, quoteForShell } from '../src/backends/crispasr.ts';
 import { playWavCommand } from '../src/backends/playback.ts';
 import { FakeSttBackend, FakeTtsBackend } from '../src/backends/fake.ts';
 import { MacosSttBackend } from '../src/backends/macos.ts';
@@ -93,9 +93,9 @@ describe('whisper-local backend', () => {
     const commands: string[] = [];
     const run = async (command: string) => {
       commands.push(command);
-      // The command is `whisper-cli -f <file> -oj -of <prefix>`; write the
-      // JSON at <prefix>.json so the backend can read it.
-      const match = /-of '([^']+)'/.exec(command);
+      // The command is `'whisper-cli' '-f' <file> '-oj' '-of' <prefix>`; write
+      // the JSON at <prefix>.json so the backend can read it.
+      const match = /'-of' '([^']+)'/.exec(command);
       assert.ok(match !== null, `expected -of prefix in ${command}`);
       await writeFile(`${match[1]}.json`, JSON.stringify({ transcription: [{ text: 'recognized speech' }] }));      return { exitCode: 0, stdout: '', stderr: '' };
     };
@@ -103,7 +103,7 @@ describe('whisper-local backend', () => {
     const outcome = await backend.transcribe('/tmp/audio.m4a');
     assert.equal(outcome.transcript, 'recognized speech');
     assert.match(commands[0] ?? '', /whisper-cli/);
-    assert.match(commands[0] ?? '', /-m 'tiny'/);
+    assert.match(commands[0] ?? '', /'-m' 'tiny'/);
   });
 
   it('fails loud on a nonzero exit', async () => {
@@ -157,21 +157,87 @@ describe('shell quoting', () => {
     assert.equal(shq('plain'), "'plain'");
     assert.equal(shq('a b'), "'a b'");
   });
+
+  it('gives the shell back exactly the argv it was given', () => {
+    // The token that used to be the hole: text from a reply, beginning with a
+    // dash, emitted raw into the command line — so the shell read a second
+    // statement out of it. Asserting on the *string* cannot catch that class of
+    // bug at all, because the bug is in how a shell re-reads the string, so this
+    // test re-reads it.
+    const argv = [
+      'say',
+      '-x; touch /tmp/PWNED; echo ',
+      "it's",
+      'a b',
+      "C:/a'; calc.exe; 'b.wav",
+      '--voice',
+      '',
+    ];
+    assert.deepEqual(unquote(buildCommandLine(argv)), argv);
+  });
 });
 
+/**
+ * Read a command line back the way the running platform's shell would: quoted
+ * words only, `''` doubling on PowerShell, the `'\''` idiom on POSIX, and the
+ * call operator stripped where it is required. Throws on any bare word, which is
+ * precisely what an injection leaves behind.
+ */
+function unquote(command: string): string[] {
+  const powershell = process.platform === 'win32';
+  const out: string[] = [];
+  let i = powershell && command.startsWith('& ') ? 2 : 0;
+  while (i < command.length) {
+    const ch = command[i] ?? '';
+    if (ch === ' ') {
+      i += 1;
+      continue;
+    }
+    if (ch !== "'") throw new Error(`bare word at ${i}: ${command.slice(i)}`);
+    i += 1;
+    let value = '';
+    for (;;) {
+      if (i >= command.length) throw new Error('unterminated quote');
+      const at = command[i] ?? '';
+      if (at !== "'") {
+        value += at;
+        i += 1;
+        continue;
+      }
+      if (powershell && command[i + 1] === "'") {
+        value += "'";
+        i += 2;
+        continue;
+      }
+      if (!powershell && command[i + 1] === '\\' && command[i + 2] === "'" && command[i + 3] === "'") {
+        value += "'";
+        i += 4;
+        continue;
+      }
+      i += 1;
+      break;
+    }
+    out.push(value);
+  }
+  return out;
+}
+
 describe('crispasr backend', () => {
-  it('builds the full command line with the customvoice backend', () => {
-    const cmd = buildCommandLine([
-      'crispasr', '--backend', 'qwen3-tts-customvoice',
-      '-m', 'D:/tts/talker.gguf', '--codec-model', 'D:/tts/codec.gguf',
-      '--voice', 'dylan', '--tts', '你好', '--tts-output', 'out.wav',
-    ]);
-    assert.match(cmd, /crispasr/);
-    assert.match(cmd, /qwen3-tts-customvoice/);
-    assert.match(cmd, /--voice/);
-    assert.match(cmd, /dylan/);
-    assert.match(cmd, /你好/);
-    assert.match(cmd, /out\.wav/);
+  it('builds the argv the engine runs, with the backend the model needs', () => {
+    const base = { bin: 'crispasr', model: 'D:/tts/talker.gguf', codec: 'D:/tts/codec.gguf' };
+    const argv = crispasrArgv(base, { text: '你好', voice: 'dylan' }, 'out.wav');
+    assert.equal(argv[0], 'crispasr');
+    assert.deepEqual(argv.slice(1, 3), ['--backend', 'qwen3-tts-customvoice'], 'no backend named ⇒ the 0.6B default');
+    assert.deepEqual(argv.slice(3, 7), ['-m', 'D:/tts/talker.gguf', '--codec-model', 'D:/tts/codec.gguf']);
+    assert.deepEqual(argv.slice(7, 13), ['--voice', 'dylan', '--tts', '你好', '--tts-output', 'out.wav']);
+    // The 1.7B port is a different backend name; choosing it is the only way the
+    // engine gets a matching pair.
+    const big = crispasrArgv({ ...base, backend: 'qwen3-tts-1.7b-customvoice' }, { text: 'x', voice: 'aiden' }, 'o.wav');
+    assert.deepEqual(big.slice(1, 3), ['--backend', 'qwen3-tts-1.7b-customvoice']);
+    const flags = crispasrArgv({ ...base, extraFlags: ['--gpu-backend', 'cuda'] }, { text: 'x', voice: 'aiden' }, 'o.wav');
+    assert.deepEqual(flags.slice(13), ['--gpu-backend', 'cuda']);
+    // The command string is the same tokens, shell-quoted — one source of truth.
+    assert.equal(crispasrCommand(base, { text: '你好', voice: 'dylan' }, 'out.wav'), buildCommandLine(argv));
   });
 
   it('quotes apostrophes for the current shell family', () => {

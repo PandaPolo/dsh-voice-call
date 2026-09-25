@@ -11,14 +11,19 @@
  * - `POST /voice/call/answer` — the human's answer. The body is the reserved
  *   `VoiceAnswerPayload` contract verbatim; the response is `VoiceAnswerResult`.
  *
- * Same-origin only (the webserver is loopback-bound by default), same trust
- * level as the audio route.
+ * Same-origin is not something the host enforces for us — its webserver has no
+ * session, no token and no origin check, and binds a configurable host — so the
+ * one write on this prefix goes through {@link guardWrite}. Reads are open: a
+ * cross-site page cannot read a response the server never labels as shareable.
  *
  * @module dsh-voice-call/callcard/web
  */
+import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Context } from '@deepseek-ai/cordis';
 import { CallBoard, type AnswerDecision } from './board.ts';
+import { toneById } from '../client/tones.ts';
+import { guardWrite } from '../web-guard.ts';
 
 /** The route prefix serving the call-card endpoints. */
 export const CALL_ROUTE = '/voice/call';
@@ -40,7 +45,17 @@ const ANSWERABLE: readonly AnswerDecision[] = ['accepted', 'rejected', 'later'];
  * disposer. Headless deployments (no webserver) skip it — the board then has
  * no subscribers and the ring channel falls back to the v0.1 prompt channel.
  */
-export function installCallCardRoutes(ctx: Context, board: CallBoard): () => void {
+/** The card's presentation, served so the overlay can render before any call. */
+export interface CallCardAppearance {
+  readonly theme: 'system' | 'light' | 'dark';
+  readonly palette: string;
+  /** Play a ringtone while a card is ringing. */
+  readonly ringtone: boolean;
+  /** Which of {@link TONES} the above plays. */
+  readonly tone: string;
+}
+
+export function installCallCardRoutes(ctx: Context, board: CallBoard, appearance: () => CallCardAppearance): () => void {
   const webServer = ctx.get('webServer') as
     | { register(route: { kind: 'prefix'; path: string; handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void> }): () => void }
     | undefined;
@@ -48,12 +63,12 @@ export function installCallCardRoutes(ctx: Context, board: CallBoard): () => voi
   return webServer.register({
     kind: 'prefix',
     path: CALL_ROUTE,
-    handler: (req, res) => serveCallRoute(board, req, res),
+    handler: (req, res) => serveCallRoute(board, appearance, req, res),
   });
 }
 
 /** Dispatch one `/voice/call/*` request by its path suffix. */
-export function serveCallRoute(board: CallBoard, req: IncomingMessage, res: ServerResponse): void {
+export function serveCallRoute(board: CallBoard, appearance: () => CallCardAppearance, req: IncomingMessage, res: ServerResponse): void {
   let path: string;
   try {
     path = decodeURIComponent((req.url ?? '/').split('?')[0] ?? '/');
@@ -63,6 +78,11 @@ export function serveCallRoute(board: CallBoard, req: IncomingMessage, res: Serv
     return;
   }
   const suffix = path.slice(CALL_ROUTE.length);
+  // `/answer` is the human's decision, so it is the one write here, and it is
+  // guarded before the suffix is read the same way the provisioning prefix does
+  // it: an endpoint that ends up in front of a new route cannot be trusted to
+  // remember this line.
+  if (req.method === 'POST' && guardWrite(req, res)) return;
   if (suffix === '/events') {
     if (req.method !== 'GET') return rejectMethod(res, 'GET');
     serveEventStream(board, req, res);
@@ -71,7 +91,7 @@ export function serveCallRoute(board: CallBoard, req: IncomingMessage, res: Serv
   if (suffix === '/state') {
     if (req.method !== 'GET') return rejectMethod(res, 'GET');
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-    res.end(JSON.stringify({ calls: board.list() }));
+    res.end(JSON.stringify({ calls: board.list(), appearance: appearance() }));
     return;
   }
   if (suffix === '/answer') {
@@ -79,8 +99,80 @@ export function serveCallRoute(board: CallBoard, req: IncomingMessage, res: Serv
     serveAnswer(board, req, res);
     return;
   }
+  // The ringtones are files that ship with the plugin, served from the same
+  // origin as everything else: the card cannot reach the package directory, and
+  // an inline base64 blob would triple the client bundle for one sound. The
+  // `?tone=` query is what the settings card's 试听 and a card that picked a
+  // different tone both use, and it goes through the table, never through a path.
+  if (suffix === '/ringtone') {
+    if (req.method !== 'GET') return rejectMethod(res, 'GET');
+    serveRingtone(res, new URL(req.url ?? '/', 'http://dsh.local').searchParams.get('tone') ?? undefined);
+    return;
+  }
   res.writeHead(404);
   res.end();
+}
+
+/** The directory the tone files are read from — the one {@link TONES} names into. */
+const ASSETS = new URL('../../assets/', import.meta.url);
+
+/** One file per tone, read once each and kept: these bytes never change at runtime. */
+const ringtoneCache = new Map<string, Buffer>();
+/** Files already known to be missing, so a partial install fails quietly once. */
+const ringtoneFailed = new Set<string>();
+
+/**
+ * Serve the ringtone named by `requested`, falling back to the configured one and
+ * then to the shipped default.
+ *
+ * The id is looked up in the tone table and the table's own constant says which
+ * file to read — an id is never a path, and the resolved URL additionally has to
+ * stay under `assets/`. So `?tone=../../package.json` and `?tone=%2e%2e%2f` both
+ * ring with `classic` rather than returning the package manifest.
+ */
+function serveRingtone(res: ServerResponse, requested: string | undefined): void {
+  const tone = toneById(requested).file;
+  if (ringtoneFailed.has(tone)) {
+    res.writeHead(404);
+    res.end();
+    return;
+  }
+  const send = (bytes: Buffer): void => {
+    res.writeHead(200, {
+      'content-type': 'audio/wav',
+      'content-length': String(bytes.length),
+      // Content-addressed by the package version, so an upgrade replaces it. The
+      // tone rides in the query, which is part of the cache key, so switching
+      // ringtones cannot be answered out of a stale entry.
+      'cache-control': 'public, max-age=86400',
+    });
+    res.end(bytes);
+  };
+  const cached = ringtoneCache.get(tone);
+  if (cached !== undefined) {
+    send(cached);
+    return;
+  }
+  const file = new URL(tone, ASSETS);
+  if (!file.href.startsWith(ASSETS.href)) {
+    ringtoneFailed.add(tone);
+    res.writeHead(404);
+    res.end();
+    return;
+  }
+  readFile(file)
+    .then((bytes) => {
+      ringtoneCache.set(tone, bytes);
+      send(bytes);
+    })
+    .catch(() => {
+      // A package built without `assets/` (an old tarball, a partial install)
+      // must not make the card ring loudly or 500: the card falls back to
+      // silence and the call itself is unaffected.
+      ringtoneFailed.add(tone);
+      res.writeHead(404);
+      res.end();
+    });
 }
 
 /** Hold one SSE response open and mirror the board onto it. */

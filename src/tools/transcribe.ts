@@ -24,6 +24,16 @@ export interface TranscribeDeps {
   readonly stt: SttBackend;
   readonly record: (seconds: number | undefined, signal?: AbortSignal) => Promise<RecordedMedia>;
   readonly commit: (file: string, name: string, extra?: { readonly durationMs?: number }) => Promise<AudioRef>;
+  /**
+   * Turn the file the caller named into one this deployment may read, or throw
+   * the reason it may not. Required rather than optional because what it guards
+   * is the only input here that comes from a model: `source.file` goes straight
+   * to the STT backend and is then copied into the audio store, which the web
+   * route serves. Left unchecked, that is a way for a prompt to have any file the
+   * host user can read copied onto a URL — and on the openai backend, posted off
+   * the machine.
+   */
+  readonly confine: (file: string) => string;
   readonly appendNote: (data: VoiceNoteData) => void;
   readonly deliverToPeer: (to: string, transcript: string, audioRef: AudioRef) => Promise<{ readonly messageId: string; readonly peer: string } | undefined>;
   readonly deliverUserMessage: (transcript: string, noteId: string) => void;
@@ -50,43 +60,52 @@ export async function runTranscribe(
   signal?: AbortSignal,
 ): Promise<TranscribeOutput> {
   const source = args.source;
-  let file: string;
-  let mediaDurationMs: number | undefined;
-  if ('file' in source) {
-    file = source.file;
-  } else {
-    const recorded = await deps.record(source.record?.seconds, signal);
-    file = recorded.file;
-    mediaDurationMs = recorded.durationMs;
-  }
-  const outcome = await deps.stt.transcribe(file, signal);
-  const noteId = mintNoteId(deps.now ?? Date.now);
-  const coords = deps.coords();
-  const audioRef = await deps.commit(file, `voice-in-${noteId}${extOf(file)}`);
-  const note: VoiceNoteData = {
-    noteId,
-    turn: coords.turn,
-    step: coords.step,
-    audioRef,
-    transcript: outcome.transcript,
-    direction: 'in',
-    backend: outcome.backend,
-  };
-  deps.appendNote(note);
+  let discardTemp: (() => Promise<void>) | undefined;
+  try {
+    let file: string;
+    let mediaDurationMs: number | undefined;
+    if ('file' in source) {
+      file = deps.confine(source.file);
+    } else {
+      const recorded = await deps.record(source.record?.seconds, signal);
+      file = recorded.file;
+      mediaDurationMs = recorded.durationMs;
+      discardTemp = recorded.discard;
+    }
+    const outcome = await deps.stt.transcribe(file, signal);
+    const noteId = mintNoteId(deps.now ?? Date.now);
+    const coords = deps.coords();
+    const audioRef = await deps.commit(file, `voice-in-${noteId}${extOf(file)}`);
+    const note: VoiceNoteData = {
+      noteId,
+      turn: coords.turn,
+      step: coords.step,
+      audioRef,
+      transcript: outcome.transcript,
+      direction: 'in',
+      backend: outcome.backend,
+    };
+    deps.appendNote(note);
 
-  let deliveredTo: { readonly messageId: string; readonly peer: string } | undefined;
-  if (args.to !== undefined && args.to !== '') {
-    deliveredTo = await deps.deliverToPeer(args.to, outcome.transcript, audioRef);
-  } else {
-    deps.deliverUserMessage(outcome.transcript, noteId);
+    let deliveredTo: { readonly messageId: string; readonly peer: string } | undefined;
+    if (args.to !== undefined && args.to !== '') {
+      deliveredTo = await deps.deliverToPeer(args.to, outcome.transcript, audioRef);
+    } else {
+      deps.deliverUserMessage(outcome.transcript, noteId);
+    }
+    return {
+      transcript: outcome.transcript,
+      audioRef,
+      backend: outcome.backend,
+      ...(outcome.durationMs !== undefined ? { durationMs: outcome.durationMs } : mediaDurationMs !== undefined ? { durationMs: mediaDurationMs } : {}),
+      ...(deliveredTo !== undefined ? { deliveredTo } : {}),
+    };
+  } finally {
+    // The recorder's own copy leaves whether this turn landed or blew up: the
+    // store's copy is the one the log and the card point at, and a raw mic
+    // capture sitting in the temp dir has nobody left to serve.
+    await discardTemp?.();
   }
-  return {
-    transcript: outcome.transcript,
-    audioRef,
-    backend: outcome.backend,
-    ...(outcome.durationMs !== undefined ? { durationMs: outcome.durationMs } : mediaDurationMs !== undefined ? { durationMs: mediaDurationMs } : {}),
-    ...(deliveredTo !== undefined ? { deliveredTo } : {}),
-  };
 }
 
 function extOf(file: string): string {
@@ -101,7 +120,7 @@ export const sourceSchema = {
       type: 'object',
       additionalProperties: false,
       properties: {
-        file: { type: 'string', required: true, description: 'Absolute path of an audio file to transcribe.' },
+        file: { type: 'string', required: true, description: 'Path of an audio file inside the audio directory (the one `audioDir` names, `~/.dsh/voice` by default) to transcribe.' },
       },
     },
     {
@@ -136,7 +155,7 @@ export function applyTranscribeTool(
 ): void {
   ctx.tools.register(defineTool({
     name: 'transcribe',
-    description: 'Transcribe spoken audio into a user message. Pass exactly one of source.file (an existing audio file path) or source.record (record from the microphone for source.record.seconds, default 5). The transcript becomes a user message the agent responds to; the audio is saved under ~/.dsh/voice/. Optional `to` delivers the note to another local DSH session by crosstalk peer name/ref.',
+    description: 'Transcribe spoken audio into a user message. Pass exactly one of source.file (a file that already sits inside the audio directory — any other path is refused) or source.record (record from the microphone for source.record.seconds, default 5). The transcript becomes a user message the agent responds to; the audio is saved under ~/.dsh/voice/. Optional `to` delivers the note to another local DSH session by crosstalk peer name/ref.',
     parameters: transcribeParameters,
     output: {
       schema: {
@@ -193,6 +212,7 @@ export function buildTranscribeDeps(
     readonly stt: SttBackend;
     readonly record: (seconds: number | undefined, signal?: AbortSignal) => Promise<RecordedMedia>;
     readonly commit: (file: string, name: string, extra?: { readonly durationMs?: number }) => Promise<AudioRef>;
+    readonly confine: (file: string) => string;
     readonly durableEvents: () => boolean;
   },
   exec: { readonly agent?: Agent },
@@ -202,6 +222,7 @@ export function buildTranscribeDeps(
     stt: deps.stt,
     record: deps.record,
     commit: deps.commit,
+    confine: deps.confine,
     appendNote: (data) => appendVoiceNote(ctx, session, data, deps.durableEvents()),
     deliverToPeer: (to, transcript, audioRef) => deliverToPeer(ctx, to, transcript, audioRef),
     deliverUserMessage: (transcript, noteId) => {
@@ -210,7 +231,7 @@ export function buildTranscribeDeps(
         id: MessageId(`voice-${noteId}`),
         role: 'user',
         content: [{ type: 'text', text: transcript }],
-        source: { kind: 'plugin', plugin: 'dsh-voice-call', form: 'notice', summary: 'voice note transcribed' },
+        source: { kind: 'voice-call', plugin: 'dsh-voice-call', form: 'notice', summary: 'voice note transcribed' },
       };
       exec.agent.send(message, 'next-step', true);
     },

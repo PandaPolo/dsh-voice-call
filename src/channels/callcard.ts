@@ -49,18 +49,36 @@ export class CallCardRingChannel implements RingChannel {
 
   async ring(request: RingRequest): Promise<RingOutcome> {
     const { board, fallback } = this.deps;
+    const signal = request.signal;
+    if (signal?.aborted === true) return { kind: 'refused', reason: 'the turn was cancelled before the call rang' };
     if (!board.hasSubscribers) {
       if (fallback !== undefined) return fallback.ring(request);
       return { kind: 'refused', reason: 'no call-card client is connected' };
     }
     return await new Promise<RingOutcome>((resolve) => {
+      let cancelled = false;
       const settled = (outcome: RingOutcome): void => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         resolve(outcome);
       };
       const timer = setTimeout(() => {
         board.expire(request.call.callId, `the ring timed out after ${this.deps.ringTimeoutMs()}ms`);
       }, Math.max(1, this.deps.ringTimeoutMs()));
+      // Cancelling the turn brings the card down with it. This channel used to
+      // read `request.signal` not at all — the v0.1 prompt channel passes it
+      // through — so a cancelled conversation left a card ringing for the whole
+      // of `ringTimeoutMs` (ten minutes at the schema's ceiling), holding its
+      // timer, its board entry and its text.
+      const onAbort = (): void => {
+        // `expire` reaches the waiter below as a `missed` decision on the way
+        // out; the flag is what stops that from reporting a cancellation as the
+        // human having ignored a call they were never asked about.
+        cancelled = true;
+        board.expire(request.call.callId, 'the ring was cancelled with the turn');
+        settled({ kind: 'refused', reason: 'the turn was cancelled while the call was ringing' });
+      };
+      signal?.addEventListener('abort', onAbort);
       board.open(
         {
           callId: request.call.callId,
@@ -76,6 +94,7 @@ export class CallCardRingChannel implements RingChannel {
         // truthful status for the agent (nobody answered), distinct from
         // `refused`/`unavailable` (nobody could answer).
         (decision: CallDecision) => {
+          if (cancelled) return;
           settled({ kind: 'answered', decision });
         },
       );

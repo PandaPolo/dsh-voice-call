@@ -7,6 +7,7 @@
  *
  * @module dsh-voice/backends/factory
  */
+import { rm } from 'node:fs/promises';
 import type { Context } from '@deepseek-ai/cordis';
 import type { RecordedMedia, VoiceConfig } from '../types.ts';
 import { CrispasrTtsBackend } from './crispasr.ts';
@@ -91,6 +92,7 @@ export function createTtsBackend(deps: BackendDeps): TtsBackend {
         bin: engine.bin ?? 'crispasr',
         model: engine.model ?? '',
         codec: engine.codec ?? '',
+        ...(engine.backend !== undefined && engine.backend !== '' ? { backend: engine.backend } : {}),
       });
     }
   }
@@ -106,16 +108,25 @@ export function createRecordFn(deps: BackendDeps): (seconds: number | undefined,
     if (!(deps.probes ?? probeBackends(deps.config)).mic) {
       throw new Error('dsh-voice: mic recording is not available in this deployment (needs ffmpeg or swift on macOS)');
     }
-    const file = await recordTarget(deps.config, 'voice-record');
+    const { dir, file } = await recordTarget('voice-record');
     await recordWithMacos(run, file, seconds, signal);
-    return { file, durationMs: seconds !== undefined && seconds > 0 ? Math.round(seconds * 1000) : 5000 };
+    return {
+      file,
+      durationMs: seconds !== undefined && seconds > 0 ? Math.round(seconds * 1000) : 5000,
+      // What ffmpeg or the swift shim just wrote is the raw microphone: unedited
+      // speech, in the OS temp dir, under a name nobody will ever look for. The
+      // audio store keeps its own copy of whatever survives transcription, so
+      // this one has no purpose left after that — and a temp dir is exactly the
+      // place a person assumes the program cleans up itself.
+      discard: () => rm(dir, { recursive: true, force: true }).catch(() => undefined),
+    };
   };
 }
 
-async function recordTarget(config: VoiceConfig, kind: string): Promise<string> {
+async function recordTarget(kind: string): Promise<{ readonly dir: string; readonly file: string }> {
   const { mkdtemp } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const dir = await mkdtemp(join(tmpdir(), 'dsh-voice-record-'));
-  return join(dir, `${kind}.m4a`);
+  return { dir, file: join(dir, `${kind}.m4a`) };
 }

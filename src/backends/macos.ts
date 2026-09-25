@@ -8,7 +8,7 @@
  */
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { shqFlags } from './quote.ts';
+import { buildCommandLine } from './quote.ts';
 import type { ShellRun } from './runner.ts';
 import type { SttBackend, SttOutcome } from './types.ts';
 
@@ -37,7 +37,7 @@ export class MacosSttBackend implements SttBackend {
   async transcribe(file: string, signal?: AbortSignal): Promise<SttOutcome> {
     const shim = this.options.shim ?? macosSttShimPath();
     // First run compiles the shim; give it room but still bound the call.
-    const outcome = await this.run(shqFlags('swift', shim, file), { signal });
+    const outcome = await this.run(buildCommandLine(['swift', shim, file]), { signal });
     if (outcome.exitCode !== 0) {
       const detail = outcome.stderr.trim() || outcome.stdout.trim();
       throw new Error(`macos: speech recognition failed (exit ${outcome.exitCode})${detail !== '' ? `: ${detail}` : ''}`);
@@ -60,7 +60,7 @@ export async function recordWithMacos(run: ShellRun, outFile: string, seconds: n
   const ffmpeg = await tryRun(run, 'command -v ffmpeg', signal);
   if (ffmpeg) {
     const outcome = await run(
-      shqFlags('ffmpeg', '-y', '-f', 'avfoundation', '-i', ':0', '-t', String(duration), '-c:a', 'aac', outFile),
+      buildCommandLine(['ffmpeg', '-y', '-f', 'avfoundation', '-i', ':0', '-t', String(duration), '-c:a', 'aac', outFile]),
       { signal },
     );
     if (outcome.exitCode === 0) return;
@@ -71,7 +71,7 @@ export async function recordWithMacos(run: ShellRun, outFile: string, seconds: n
   if (!swift) {
     throw new Error('dsh-voice: mic recording is unavailable — no ffmpeg or swift on PATH');
   }
-  const outcome = await run(shqFlags('swift', macosRecordShimPath(), outFile, String(duration)), { signal });
+  const outcome = await run(buildCommandLine(['swift', macosRecordShimPath(), outFile, String(duration)]), { signal });
   if (outcome.exitCode !== 0) {
     const detail = outcome.stderr.trim() || outcome.stdout.trim();
     throw new Error(`dsh-voice: mic recording failed (exit ${outcome.exitCode})${detail !== '' ? `: ${detail}` : ''}`);

@@ -9,7 +9,7 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { shqFlags } from './quote.ts';
+import { buildCommandLine } from './quote.ts';
 import type { ShellRun } from './runner.ts';
 import type { SttBackend, SttOutcome } from './types.ts';
 
@@ -59,7 +59,7 @@ export class WhisperLocalSttBackend implements SttBackend {
       const prefix = join(dir, 'out');
       const tokens = [this.options.bin, '-f', file, '-oj', '-of', prefix];
       if (this.options.model !== undefined && this.options.model !== '') tokens.push('-m', this.options.model);
-      const outcome = await this.run(shqFlags(...tokens), { signal });
+      const outcome = await this.run(buildCommandLine(tokens), { signal });
       if (outcome.exitCode !== 0) {
         const detail = outcome.stderr.trim() || outcome.stdout.trim();
         throw new Error(`whisper-local: recognition failed (exit ${outcome.exitCode})${detail !== '' ? `: ${detail}` : ''}`);

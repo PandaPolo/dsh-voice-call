@@ -21,7 +21,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import type { JobStart } from '@deepseek-ai/dsh-jobs';
+import type { JobSpec } from '@deepseek-ai/dsh-jobs';
 import { defineTool, type GenericCallView } from '@deepseek-ai/dsh-tools';
 import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions';
 import type { CallMode } from '../types.ts';
@@ -47,6 +47,11 @@ export interface OfferCallDeps {
   readonly agent?: Agent;
   /** Resolve the current call mode (default `ask`). */
   readonly callMode: () => CallMode;
+  /**
+   * The owning tool call's signal, handed to the ring channel so cancelling the
+   * turn takes the card down with it instead of leaving it ringing.
+   */
+  readonly signal?: AbortSignal;
   /** The speak pipeline used for an accepted call. */
   readonly speak: SpeakDeps;
   readonly appendCall: (data: VoiceCallData) => void;
@@ -80,7 +85,11 @@ export async function runOfferCall(deps: OfferCallDeps, input: OfferCallArgs): P
     return { status: 'off', callId: settled.callId, reason: 'calls are disabled (callMode: off)' };
   }
 
-  const outcome = await deps.ring.ring({ call, agent: deps.agent });
+  const outcome = await deps.ring.ring({
+    call,
+    ...(deps.agent !== undefined ? { agent: deps.agent } : {}),
+    ...(deps.signal !== undefined ? { signal: deps.signal } : {}),
+  });
   if (outcome.kind === 'refused') {
     const settled = refuseCall(call, 'unavailable', outcome.reason);
     deps.appendCall(callEventOf(settled));
@@ -155,7 +164,7 @@ export const offerCallParameters = {
 export function applyOfferCallTool(
   ctx: Context,
   deps: {
-    readonly makeDeps: (exec: { readonly agent?: Agent }) => OfferCallDeps;
+    readonly makeDeps: (exec: { readonly agent?: Agent; readonly signal?: AbortSignal }) => OfferCallDeps;
   },
 ): void {
   ctx.tools.register(defineTool({
@@ -219,12 +228,13 @@ export function buildOfferCallDeps(
     readonly speak: SpeakDeps;
     readonly durableEvents: () => boolean;
   },
-  exec: { readonly agent?: Agent },
+  exec: { readonly agent?: Agent; readonly signal?: AbortSignal },
 ): OfferCallDeps {
   const session = exec.agent?.session;
   return {
     ring: deps.ring,
     agent: exec.agent,
+    ...(exec.signal !== undefined ? { signal: exec.signal } : {}),
     callMode: deps.callMode,
     speak: deps.speak,
     appendCall: (data) => appendVoiceCall(ctx, session, data, deps.durableEvents()),

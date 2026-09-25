@@ -13,7 +13,7 @@ import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import type { JobId, JobOutcome, JobStart } from '@deepseek-ai/dsh-jobs';
+import type { JobId, JobOutcome, JobSpec } from '@deepseek-ai/dsh-jobs';
 import { MessageId } from '@deepseek-ai/dsh-llm';
 import type { UserMessage } from '@deepseek-ai/dsh-llm';
 import { defineTool, type GenericCallView } from '@deepseek-ai/dsh-tools';
@@ -25,7 +25,7 @@ import { appendVoiceNote, currentCoords, mintNoteId } from '../session-events.ts
 /** Everything the speak pipeline needs; injected so tests run with fakes. */
 export interface SpeakDeps {
   readonly tts: TtsBackend;
-  readonly startJob: (spec: JobStart) => JobId;
+  readonly startJob: (spec: JobSpec) => JobId;
   /**
    * The owning agent, stamped onto the job spec. rc.6's Web composition
    * disables `tool-jobs` on the host plane (the controller lives in the
@@ -94,13 +94,15 @@ export function startSpeakJob(
       return { status: 'failed', detail: message };
     }
   })();
-  const spec: JobStart = {
+  const spec: JobSpec = {
     kind: 'voice-speak',
     label: `speak: ${truncateLabel(input.text)}`,
-    // Unowned jobs are refused in the rc.6 Web composition (host-plane
-    // tool-jobs is disabled); the owning agent makes the preset's controller
-    // serve this job. Absent in headless runs, where the host owns tool-jobs.
-    ...(deps.owner !== undefined ? { owner: deps.owner } : {}),
+    // Unowned jobs are refused in the web composition (host-plane tool-jobs is
+    // disabled); the owner's *live* agent — the one currently registered under
+    // this session id — is what lets the preset's controller serve the job
+    // (JobSpec.owner is a SessionId since 0.1.7). Absent in headless runs,
+    // where the host owns tool-jobs.
+    ...(deps.owner !== undefined ? { owner: deps.owner.session.id } : {}),
     run: () => ({
       cancel: (reason) => controller.abort(reason ?? 'cancelled'),
       done: work,
@@ -196,7 +198,7 @@ export function buildSpeakDeps(
         id: MessageId(`voice-fail-${mintNoteId()}`),
         role: 'user',
         content: [{ type: 'text', text: `dsh-voice-call: speak failed — ${message}` }],
-        source: { kind: 'plugin', plugin: 'dsh-voice-call', form: 'notice', summary: 'speak failed' },
+        source: { kind: 'voice-call', plugin: 'dsh-voice-call', form: 'notice', summary: 'speak failed' },
       };
       try {
         exec.agent.inject(note);

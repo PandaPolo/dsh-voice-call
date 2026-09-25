@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import type { JobId, JobStart } from '@deepseek-ai/dsh-jobs';
+import type { JobId, JobSpec } from '@deepseek-ai/dsh-jobs';
 import { FakeTtsBackend } from '../src/backends/fake.ts';
 import { CallBoard, type CallCardSettledState } from '../src/callcard/board.ts';
 import { CallCardRingChannel } from '../src/channels/callcard.ts';
@@ -205,6 +205,33 @@ describe('call-card ring channel', () => {
     assert.equal(board.list().length, 1);
   });
 
+  it('takes the card down when the turn is cancelled, rather than ringing to the ceiling', async () => {
+    const board = ringingBoard();
+    // The schema allows a ten-minute ring, which is how long this one would have
+    // run: the channel used to read `request.signal` not at all, so a cancelled
+    // conversation left the card on screen, its timer armed, its board entry and
+    // its text held, and the agent's turn still awaiting an answer nobody was
+    // going to give. The v0.1 prompt channel has always passed the signal on.
+    const channel = new CallCardRingChannel({ board, callerName: () => 'DeepSeek', ringTimeoutMs: () => 600_000 });
+    const controller = new AbortController();
+    const pending = channel.ring({ call: call(), signal: controller.signal });
+    await Promise.resolve();
+    assert.equal(board.list().length, 1, 'the card is up');
+    controller.abort();
+    assert.deepEqual(await pending, { kind: 'refused', reason: 'the turn was cancelled while the call was ringing' });
+    assert.equal(board.list().length, 0, 'and it came down with the cancellation');
+  });
+
+  it('never rings a card for a turn that was already gone', async () => {
+    const board = ringingBoard();
+    const channel = new CallCardRingChannel({ board, callerName: () => 'DeepSeek', ringTimeoutMs: () => 5_000 });
+    const controller = new AbortController();
+    controller.abort();
+    const outcome = await channel.ring({ call: call(), signal: controller.signal });
+    assert.equal(outcome.kind, 'refused');
+    assert.equal(board.list().length, 0, 'a card that flashes for one tick is worse than no card');
+  });
+
   it('shows the calling session tail as the caller identity', async () => {
     const board = ringingBoard();
     const channel = new CallCardRingChannel({ board, callerName: () => 'DeepSeek', ringTimeoutMs: () => 5_000 });
@@ -264,7 +291,7 @@ describe('offer_call with the card channel', () => {
   /** Speak deps on the fake backend: synthesis writes a file, playback is a no-op. */
   const speakDeps = (dir: string): SpeakDeps => ({
     tts: new FakeTtsBackend(),
-    startJob: (spec: JobStart) => spec.kind as unknown as JobId,
+    startJob: (spec: JobSpec) => spec.kind as unknown as JobId,
     audioPath: () => join(dir, 'voice-speak-1.wav'),
     appendNote: () => {},
     injectFailure: () => {},

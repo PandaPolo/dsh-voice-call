@@ -1,7 +1,21 @@
 /**
- * Shell-quote one argument for the `sh -c` command strings handed to
- * `ctx.shell`. Single quotes with the POSIX `'\''` escape are the most
- * portable form.
+ * Shell quoting for the command strings handed to `ctx.shell`.
+ *
+ * There is exactly one entry point, {@link buildCommandLine}, and it takes an
+ * argv array. That shape is the whole point: the moment a backend is handed a
+ * list of arguments it cannot accidentally concatenate somebody's text into a
+ * command line, and it cannot pick between two quoting systems either.
+ *
+ * This file used to carry both. `shqFlags` looked at each token and emitted
+ * anything starting with `-` *raw*, on the theory that a leading dash marks a
+ * flag and a flag must stay unquoted. Two things were wrong with that. A token
+ * that begins with `-` is not necessarily a flag — the text of a spoken message
+ * can, and on a markdown-replying agent regularly does — and the previous line
+ * then pastes it into the shell with `'; rm -rf ~'` still live in it. And on
+ * `win32` the runner is PowerShell, where the `'\''` idiom is not an escaped
+ * quote but the end of a string, so any path containing an apostrophe left the
+ * argument position and entered the statement position. Quoting a genuine flag
+ * costs nothing in either shell: a quoted word is still a word.
  *
  * @module dsh-voice/backends/quote
  */
@@ -9,21 +23,6 @@
 /** Quote one argument for a POSIX shell. */
 export function shq(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-/** Join several quoted arguments into one command line. */
-export function shqJoin(...parts: string[]): string {
-  return parts.map(shq).join(' ');
-}
-
-/**
- * Build a command line: tokens starting with `-` are emitted raw (safe flag
- * literals), every other token is shell-quoted. Use for `ctx.shell` command
- * strings where flags must stay unquoted (a quoted `-o` would be treated as
- * the program name by `sh`).
- */
-export function shqFlags(...tokens: string[]): string {
-  return tokens.map((token) => (token.startsWith('-') ? token : shq(token))).join(' ');
 }
 
 /**
@@ -52,7 +51,12 @@ export function invokeForShell(program: string, quotedArgs: string): string {
   return `${shq(program)} ${quotedArgs}`.trimEnd();
 }
 
-/** Join argv tokens into one shell command line (platform-aware quoting). */
+/**
+ * Join an argv array into one shell command line, with every token quoted for
+ * the shell that will read it — flags included, because both shell families
+ * pass a quoted word through unchanged and neither one mistakes it for a
+ * command name when it is not in first position.
+ */
 export function buildCommandLine(tokens: readonly string[]): string {
   if (tokens.length === 0) return '';
   const [program, ...args] = tokens;

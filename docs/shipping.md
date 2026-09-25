@@ -6,17 +6,20 @@ verified locally except the push and the publish themselves.
 
 ## 0. Preflight (verified locally)
 
-- `pnpm test` — 87 green on the current baseline: arg-schema units (the exact-one
+- `pnpm test` — 262 green on the current baseline: arg-schema units (the exact-one
   `{file|record}` union, `speak`'s optional `voice`/`rate`), backend
   selection with faked probes, the fake text-to-text backend end-to-end
   through both tool pipelines, the `voice-note` renderer (node.data from a
   logged event, transcript-only degradation, replay purity), the call domain
   and call-card board, the durability contract (`durableEvents` stays off),
   plus the macOS `say` integration suite — which skips where `say` is absent.
-- `pnpm typecheck` (host + client tsconfigs) and `pnpm build` (host tsc +
+- `pnpm typecheck` (host + client + **test** tsconfigs — `test/` was added to the gate
+  because a `DeviceReport` used without being imported had been sitting in a route
+  suite unnoticed, and nothing in CI reads the types of a test file) and `pnpm build` (host tsc +
   client declarations + the web client bundle) — clean.
 - `pnpm pack` — tarball contains `lib/` (host + `client.js` + client d.ts),
-  `shims/`, `cordis.patch.yml`, `README.md`, `README.en.md`, `LICENSE`;
+  `shims/`, `assets/` (the eleven ringtones the card and the 试听 button read over
+  `/voice/call/ringtone`), `cordis.patch.yml`, `README.md`, `README.en.md`, `LICENSE`;
   manifest carries `dsh.bundle.patch` and `dsh.client`.
 - **Consumer simulation (host)**: the packed tarball installs into a scratch
   DSH profile (`dsh plugin --profile headless add <tarball>`) and the profile

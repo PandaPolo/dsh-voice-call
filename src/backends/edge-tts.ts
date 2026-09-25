@@ -5,7 +5,7 @@
  *
  * @module dsh-voice/backends/edge-tts
  */
-import { shqFlags } from './quote.ts';
+import { buildCommandLine } from './quote.ts';
 import type { ShellRun } from './runner.ts';
 import type { SynthesizeResult, TtsBackend } from './types.ts';
 
@@ -23,7 +23,7 @@ export class EdgeTtsBackend implements TtsBackend {
 
   async synthesize(input: { readonly text: string; readonly voice?: string }, dest: string, signal?: AbortSignal): Promise<SynthesizeResult> {
     const voice = input.voice ?? this.options.voice;
-    const command = shqFlags(this.options.bin, '--voice', voice, '--write-media', dest, '--text', input.text);
+    const command = buildCommandLine([this.options.bin, '--voice', voice, '--write-media', dest, '--text', input.text]);
     const outcome = await this.run(command, { signal });
     if (outcome.exitCode !== 0) {
       const detail = outcome.stderr.trim() || outcome.stdout.trim();

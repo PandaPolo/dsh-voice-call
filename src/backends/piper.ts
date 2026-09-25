@@ -6,7 +6,7 @@
  *
  * @module dsh-voice/backends/piper
  */
-import { shqFlags } from './quote.ts';
+import { buildCommandLine } from './quote.ts';
 import { runWavPlayback } from './playback.ts';
 import type { ShellRun } from './runner.ts';
 import type { SynthesizeResult, TtsBackend } from './types.ts';
@@ -24,7 +24,7 @@ export class PiperTtsBackend implements TtsBackend {
   }
 
   async synthesize(input: { readonly text: string }, dest: string, signal?: AbortSignal): Promise<SynthesizeResult> {
-    const command = shqFlags(this.options.bin, '-m', this.options.model, '--output_file', dest);
+    const command = buildCommandLine([this.options.bin, '-m', this.options.model, '--output_file', dest]);
     const outcome = await this.run(command, { signal, stdin: input.text });
     if (outcome.exitCode !== 0) {
       const detail = outcome.stderr.trim() || outcome.stdout.trim();

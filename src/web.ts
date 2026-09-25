@@ -14,6 +14,27 @@ import { isUnderRoot, mimeForPath } from './audio.ts';
 /** The route path prefix serving audio artifacts. */
 export const AUDIO_ROUTE = '/voice/audio';
 
+/**
+ * Stream one file into an already-headed response.
+ *
+ * `pipe()` forwards the *destination's* errors only, so a filesystem failure on
+ * the source is an unhandled `'error'` event — which Node raises as an
+ * uncaught exception, taking the whole host process down with it. This route
+ * has to survive that: the artifact store documents the files as ordinary and
+ * deletable (a user may `rm` one at any moment, including between the stat below
+ * and this read), and on Windows a wav the engine still holds open fails to read
+ * at all. The browser sees an aborted download and degrades to a transcript-only
+ * card, which is the failure the store was designed for.
+ */
+export function pipeFile(file: string, res: ServerResponse, start?: number, end?: number): void {
+  const stream = start === undefined ? createReadStream(file) : createReadStream(file, { start, end });
+  stream.on('error', () => {
+    stream.destroy();
+    res.destroy();
+  });
+  stream.pipe(res);
+}
+
 /** Register the audio route on `ctx.webServer` when present; returns the disposer. */
 export function installAudioRoute(ctx: Context, root: string): () => void {
   const webServer = ctx.get('webServer') as
@@ -69,7 +90,7 @@ export function serveAudio(root: string, req: IncomingMessage, res: ServerRespon
       'accept-ranges': 'bytes',
       'cache-control': 'private, max-age=3600',
     });
-    createReadStream(file).pipe(res);
+    pipeFile(file, res);
     return;
   }
   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
@@ -93,5 +114,5 @@ export function serveAudio(root: string, req: IncomingMessage, res: ServerRespon
     'accept-ranges': 'bytes',
     'cache-control': 'private, max-age=3600',
   });
-  createReadStream(file, { start, end: start + length - 1 }).pipe(res);
+  pipeFile(file, res, start, start + length - 1);
 }

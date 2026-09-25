@@ -5,7 +5,7 @@
  *
  * @module dsh-voice/backends/say
  */
-import { shqFlags } from './quote.ts';
+import { buildCommandLine } from './quote.ts';
 import type { ShellRun } from './runner.ts';
 import type { SynthesizeResult, TtsBackend } from './types.ts';
 
@@ -24,7 +24,7 @@ export class SayTtsBackend implements TtsBackend {
     if (input.voice !== undefined && input.voice !== '') tokens.push('--voice', input.voice);
     if (input.rate !== undefined && input.rate > 0) tokens.push('-r', String(Math.round(input.rate)));
     tokens.push(input.text);
-    const outcome = await this.run(shqFlags(...tokens), { signal });
+    const outcome = await this.run(buildCommandLine(tokens), { signal });
     if (outcome.exitCode !== 0) {
       const detail = outcome.stderr.trim() || outcome.stdout.trim();
       throw new Error(`say: synthesis failed (exit ${outcome.exitCode})${detail !== '' ? `: ${detail}` : ''}`);
@@ -33,7 +33,7 @@ export class SayTtsBackend implements TtsBackend {
   }
 
   async play(file: string, signal?: AbortSignal): Promise<void> {
-    const outcome = await this.run(shqFlags('afplay', file), { signal });
+    const outcome = await this.run(buildCommandLine(['afplay', file]), { signal });
     if (outcome.exitCode !== 0) {
       const detail = outcome.stderr.trim() || outcome.stdout.trim();
       throw new Error(`afplay: playback failed (exit ${outcome.exitCode})${detail !== '' ? `: ${detail}` : ''}`);
