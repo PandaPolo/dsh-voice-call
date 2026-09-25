@@ -24,7 +24,7 @@
  * @module dsh-voice-call/provision/cleanup
  */
 import { lstat, readdir, rm, stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 import { defaultAudioDir } from '../audio.ts';
 import type { ProvisionLayout } from './layout.ts';
@@ -134,10 +134,10 @@ export function cleanableRoot(root: string): RootVerdict {
   for (const [anchor, label] of anchors) {
     if (base === anchor) return { ok: false, reason: `voice 目录指向了${label}（${anchor}），这里面的东西不是本插件放进去的` };
   }
-  // Where the temp dir actually is is the platform's business, not this process's.
-  const temp = process.env.TMP ?? process.env.TEMP ?? process.env.TMPDIR;
-  if (temp !== undefined && temp !== '' && base === resolve(temp)) {
-    return { ok: false, reason: `voice 目录指向了系统临时目录（${resolve(temp)}），这里面的东西不是本插件放进去的` };
+  // Where the temp dir actually is is the platform's business: `tmpdir` reads
+  // TMP/TEMP/TMPDIR and falls back to /tmp, which the env vars alone do not.
+  if (base === resolve(tmpdir())) {
+    return { ok: false, reason: `voice 目录指向了系统临时目录（${base}），这里面的东西不是本插件放进去的` };
   }
   return { ok: true, reason: '' };
 }

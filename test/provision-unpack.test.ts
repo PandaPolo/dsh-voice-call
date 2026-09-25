@@ -8,7 +8,7 @@
  * payload ends up, and what happens when there is no executable at all.
  */
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, stat, writeFile, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -47,6 +47,12 @@ function fakeShell(tree: Record<string, string>): { run: ShellRun; commands: str
       const full = join(dest, path);
       await mkdir(join(full, '..'), { recursive: true });
       await writeFile(full, content);
+      // Unpacking is meant to land an *executable*, and on POSIX a file nobody
+      // can run is not one — `isExecutable` rejects it, correctly, and turned
+      // these fixtures into a Linux-only failure until they were given the bit
+      // the real archives carry. Windows ignores the mode and takes the file on
+      // platform instead.
+      await chmod(full, 0o755);
     }
     return { exitCode: 0, stdout: '', stderr: '' } satisfies ShellOutcome;
   };
@@ -153,7 +159,6 @@ describe('engine unpacking', () => {
     await mkdir(tree, { recursive: true });
     await writeFile(join(tree, 'libcrispasr.so'), payload('library'));
     await writeFile(join(tree, 'crispasr.dll'), payload('wrong kind of file'));
-    const { chmod } = await import('node:fs/promises');
     await chmod(join(tree, 'libcrispasr.so'), 0o755);
     await chmod(join(tree, 'crispasr.dll'), 0o755);
     assert.equal(await findEngineBinary(tree, 'crispasr'), undefined,

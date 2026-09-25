@@ -127,7 +127,7 @@ describe('the root boundary', () => {
       [process.cwd(), 'the working directory, whose models/ and engine/ belong to somebody else'],
       [parse(process.cwd()).root, 'the drive root itself'],
       [homedir(), 'the home directory'],
-      [process.env.TMP ?? process.env.TEMP ?? tmpdir(), 'the temp dir'],
+      [tmpdir(), 'the temp dir'],
     ] as const) {
       const verdict = cleanableRoot(notOurs);
       assert.equal(verdict.ok, false, `${notOurs} (${why}) must be refused`);

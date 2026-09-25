@@ -71,7 +71,14 @@ describe('the audio root boundary', () => {
     const store = new AudioStore(root);
     assert.equal(store.resolve('voice-in-1.m4a'), join(root, 'voice-in-1.m4a'));
     assert.equal(store.resolve(join(root, 'a', 'b.wav')), join(root, 'a', 'b.wav'));
-    for (const escape of ['../secret.txt', join(root, '..', 'secret.txt'), '/etc/passwd', 'C:\\Windows\\win.ini']) {
+    const escapes = ['../secret.txt', join(root, '..', 'secret.txt'), '/etc/passwd'];
+    if (process.platform === 'win32') {
+      // Only a Windows path parser reads `C:\…` as absolute; on POSIX that string
+      // is an ordinary file name and lands legitimately inside the root — which
+      // is the right answer there, so the case is asserted where it means something.
+      escapes.push('C:\\Windows\\win.ini');
+    }
+    for (const escape of escapes) {
       assert.throws(() => store.resolve(escape), /escapes the audio root/, `"${escape}" is not ours to read`);
     }
   });
