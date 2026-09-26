@@ -42,7 +42,17 @@ class FakeAudio implements AudioLike {
   block(index = this.pending.length - 1): void { this.pending[index]?.fail(); }
 }
 
-class DOMExceptionLike extends Error {}
+/**
+ * The browser's refusal. A real `DOMException` carries a `name` — that name is
+ * the whole difference between "the browser blocked autoplay" and "the asset is
+ * broken", so the double has to have one too.
+ */
+class DOMExceptionLike extends Error {
+  constructor(message?: string) {
+    super(message);
+    this.name = 'NotAllowedError';
+  }
+}
 
 /** A gesture source the test fires by hand. */
 function gestures(): { listen: (retry: () => void) => () => void; fire: () => void; armed: () => boolean } {
@@ -120,6 +130,27 @@ describe('ringtone player', () => {
     source.fire();
     assert.equal(audio.pending.length, 2, 'the first gesture re-attempts the ring');
     assert.equal(source.armed(), false, 'and the retry is one-shot, not a listener per attempt');
+  });
+
+  it('says why the ring is inaudible, and stops saying so once it sounds', async () => {
+    // A card that rings in silence reads as a broken plugin. The browser gives
+    // back only a rejection, so the player has to hold onto it and hand it up —
+    // `NotAllowedError` is autoplay ("点一下页面就会响"), anything else is the
+    // asset, and the card needs the two apart.
+    const audio = new FakeAudio();
+    const source = gestures();
+    const reported: string[] = [];
+    const ringer = createRinger(() => audio, source.listen, (reason) => reported.push(reason));
+    ringer.setRinging(true);
+    audio.block();
+    await Promise.resolve();
+    assert.equal(reported.length, 1, 'the refusal is reported');
+    assert.match(reported[0] ?? '', /NotAllowedError/, 'with the browser error name, not just "failed"');
+
+    source.fire();
+    audio.pending[1]?.settle();
+    await Promise.resolve();
+    assert.equal(reported.at(-1), '', 'a ring that starts has nothing left to explain');
   });
 
   it('never arms a retry once the call is over', async () => {

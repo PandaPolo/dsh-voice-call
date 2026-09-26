@@ -84,6 +84,8 @@ export function ringtoneUrl(tone: string): string {
 export function createRinger(
   createAudio: () => AudioLike,
   onGesture: (listen: () => void) => () => void = () => () => {},
+  /** Told `''` when sound starts and the reason when an attempt is refused. */
+  report: (reason: string) => void = () => {},
 ): Ringer {
   let audio: AudioLike | undefined;
   let ringing = false;
@@ -131,12 +133,17 @@ export function createRinger(
       result.then(
         // A stop() during the pending play has to win: the browser starts on
         // resolution, so the pause belongs here and not on the logical flag.
-        () => { if (!wanted()) audio?.pause(); },
         () => {
+          report('');
+          if (!wanted()) audio?.pause();
+        },
+        (error: unknown) => {
           if (!wanted()) { playing = false; return; }
-          // Blocked by the autoplay policy: keep `playing` honest about the fact
-          // that nothing is audible, and wait for a gesture to try once more.
+          // Blocked: keep `playing` honest about the fact that nothing is
+          // audible, hand the reason up (the browser gives back only this), and
+          // wait for a gesture to try once more.
           playing = false;
+          report(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
           if (forgetGesture === undefined) forgetGesture = onGesture(() => sync());
         },
       );
@@ -192,7 +199,7 @@ function isPromise(result: Promise<void> | void): result is Promise<void> {
  * exactly the activation a page-wide autoplay allowance is granted for. Both
  * gestures share one handler, so whichever arrives first disarms the other.
  */
-export function browserRinger(): Ringer {
+export function browserRinger(report?: (reason: string) => void): Ringer {
   return createRinger(
     () => new Audio(),
     (retry) => {
@@ -206,5 +213,6 @@ export function browserRinger(): Ringer {
         for (const type of events) window.removeEventListener(type, onGesture, true);
       };
     },
+    report,
   );
 }

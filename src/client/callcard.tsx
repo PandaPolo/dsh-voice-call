@@ -106,7 +106,11 @@ export function CallCardOverlay(): ReactNode {
   const [appearance, setShown] = useState(getAppearance);
   // One ringtone loop for the whole stack — several cards ringing at once are
   // one caller, not a chord. Lazy: nothing is created until a card rings.
-  const [ringer] = useState(browserRinger);
+  // Why the ringtone is currently inaudible ('' when it is not): the browser
+  // refuses `play()` and gives back only a rejection, so the player reports it
+  // here and the card says so out loud instead of looking broken.
+  const [silent, setSilent] = useState('');
+  const [ringer] = useState(() => browserRinger(setSilent));
   const [muted, setMuted] = useState(false);
   // Only a real pin sets the attribute: 跟随系统 stays a pure CSS concern, keyed
   // off the host's own body attribute, so an OS flip repaints live without this
@@ -134,7 +138,10 @@ export function CallCardOverlay(): ReactNode {
     ringer.setRinging(anyRinging);
     // 静音 is per-call: once nothing is ringing, the next caller deserves the
     // ringtone the config still asks for.
-    if (!anyRinging) setMuted(false);
+    if (!anyRinging) {
+      setMuted(false);
+      setSilent('');
+    }
   }, [anyRinging]);
 
   useEffect(() => {
@@ -226,6 +233,19 @@ export function CallCardOverlay(): ReactNode {
       <style>{CARD_STYLES}</style>
       <style>{PALETTE_CSS}</style>
       {anyRinging ? <RingtoneToggle muted={muted} onToggle={() => setMuted((was) => !was)} /> : null}
+      {/* A card that rings in silence reads as a broken plugin. The browser
+          refuses `play()` on a page it has not seen touched, retries on the
+          first gesture, and tells us only the error name — so the card says
+          which of the two happened rather than leaving the human to find out. */}
+      {anyRinging && silent !== ''
+        ? (
+            <div className="dsvc-silent" role="status">
+              {silent.startsWith('NotAllowedError')
+                ? '浏览器拦住了铃声 —— 点一下这个页面就会响。'
+                : `铃声没能响（${silent}）—— 点一下这个页面重试。`}
+            </div>
+          )
+        : null}
       {calls.slice(0, MAX_CARDS).map((call) => (
         <CallCard key={call.callId} call={call} now={now}
           busy={busyIds.includes(call.callId)}
@@ -476,6 +496,15 @@ ${themeDecls('light', false)}
   background: var(--dsvc-surface);
   border: 1px solid var(--dsvc-line); border-radius: 999px;
   padding: 4px 11px; box-shadow: var(--dsvc-shadow);
+}
+/* The "your ringtone was refused" line: readable, not alarming — it is a
+   browser policy, not a failure of the call. */
+.dsvc-silent {
+  font-size: 12px; font-weight: 500; color: var(--dsvc-fg-1);
+  background: var(--dsvc-surface);
+  border: 1px solid var(--dsvc-line); border-left: 3px solid var(--dsvc-accent);
+  border-radius: 8px; padding: 6px 11px;
+  box-shadow: var(--dsvc-shadow); align-self: stretch; text-align: center;
 }
 
 /* ---------- the mute toggle ----------

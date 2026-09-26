@@ -65,6 +65,7 @@ import { applySpeakTool, buildSpeakDeps } from './tools/speak.ts';
 import { applyTranscribeTool, buildTranscribeDeps } from './tools/transcribe.ts';
 import { resolveConfig, type VoiceConfig } from './types.ts';
 import type { VoiceConfigInput } from './types.ts';
+import { WaitingQuestionNudge } from './waiting/nudge.ts';
 import { installAudioRoute } from './web.ts';
 
 /** Cordis plugin name (also the config key under `plugins:`). */
@@ -127,6 +128,19 @@ export const Config = z.object({
     // kind of id the profile can hold — and the route never resolves a path from
     // it, it looks the id up in `src/client/tones.ts`.
     tone: z.union(TONE_IDS).default(DEFAULT_TONE).volatile(),
+  }),
+  // Experimental, off by default: escalate a host question nobody answers into
+  // a ringing card. `nudgeAfterMinutes` is the cold-deck patience; the host has
+  // no timeout of its own, so this number is the only clock the feature has.
+  // EXPERIMENTAL, off by default. `nudgeAfterMinutes` is the cold-deck patience;
+  // the host has no timeout on a question at all, so this number is the only
+  // clock the feature has. NOT `.volatile()` on the object itself: cordis
+  // rejects a volatile field inside an enclosing volatile field ("volatile
+  // fields require a fixed object path"), and it rejects it by refusing to
+  // activate the whole plugin — see test/plugin-config.test.ts.
+  experimental: z.object({
+    nudgeWaitingQuestions: z.boolean().default(false).volatile(),
+    nudgeAfterMinutes: z.number().min(1).max(30).default(5).volatile(),
   }),
   audioDir: z.string(),
   // Reserved for v0.3 — accepted now so configs written against v0.1 keep loading.
@@ -263,6 +277,41 @@ export function apply(ctx: Context, rawConfig: VoiceConfigInput): void {
   });
   const audioStore = (): AudioStore => new AudioStore(audioRoot);
   const audioPath = (): string => audioStore().pathFor(`voice-speak-${speakSeq()}`, 'wav');
+
+  // Experimental (spike): escalate a host question nobody answers into a card.
+  // The ask is a suspended promise with no timer anywhere in the harness, and
+  // the agent parked on it cannot escalate itself, so the clock lives here.
+  // `tools/execute` wraps the tool BODY — the thing that awaits the human —
+  // which is why this does not have to win the registration race against the
+  // `user-questions/request` bridge in dsh-api-remotes. Attention only: the
+  // card never answers, and every path takes it back down.
+  const waitingNudge = new WaitingQuestionNudge({
+    board: callBoard,
+    callerName: () => current().callCard.callerName,
+    voice: () => current().tts.voice ?? 'default',
+    delayMs: () => (current().experimental.nudgeWaitingQuestions
+      ? current().experimental.nudgeAfterMinutes * 60_000
+      : 0),
+    // 接听 says one sentence about what is waiting, through the same speak
+    // pipeline the `speak` tool uses — resolved per call so the backend the
+    // human just configured (or just broke) is the one that speaks.
+    speak: (agent) => buildSpeakDeps(ctx, {
+      tts: createTtsBackend(backendDeps()),
+      audioPath,
+      durableEvents: () => current().durableEvents,
+    }, { agent: agent as Agent | undefined }),
+  });
+  ctx.on('tools/execute', (exec, next) => waitingNudge.wrap({
+    name: exec.name,
+    callId: exec.callId,
+    arguments: exec.arguments,
+    // The live agent itself, not a projection: the speak pipeline built for an
+    // accepted nudge reads `agent.session.id` and `agent.inject(...)`. Passing
+    // `{ id }` here threw inside the card's answer waiter — which runs inside
+    // the web request handler — and took the whole host down with it.
+    ...(exec.agent === undefined ? {} : { agent: exec.agent }),
+    ...(exec.signal === undefined ? {} : { signal: exec.signal }),
+  }, next));
 
   // Backends: created per call so config changes reach the next tool call.
   const backendDeps = () => ({ ctx, config: withProvisionedEngine(current(), provisioned), policy: fullAccessPolicy });

@@ -159,6 +159,16 @@ export interface VoiceConfig {
   readonly callMode: CallMode;
   /** The call-card presentation (only used when callMode is `card`). */
   readonly callCard: CallCardConfig;
+  /**
+   * EXPERIMENTAL, off by default. `nudgeWaitingQuestions` escalates a host
+   * `ask_user_question` that nobody answers into a ringing card after
+   * `nudgeAfterMinutes`. The harness has no timeout on a question at all, so
+   * this field is the feature's only clock. See `src/waiting/nudge.ts`.
+   */
+  readonly experimental: {
+    readonly nudgeWaitingQuestions: boolean;
+    readonly nudgeAfterMinutes: number;
+  };
   /** Audio artifact root; defaults to `~/.dsh/voice` (or `$DSH_HOME/voice`). */
   readonly audioDir: string;
   /**
@@ -197,6 +207,7 @@ export interface VoiceConfigInput {
   readonly durableEvents?: boolean;
   readonly callMode?: CallMode;
   readonly callCard?: { readonly callerName?: string; readonly ringTimeoutMs?: number; readonly theme?: CardTheme; readonly palette?: string; readonly ringtone?: boolean; readonly tone?: string };
+  readonly experimental?: { readonly nudgeWaitingQuestions?: boolean; readonly nudgeAfterMinutes?: number };
   readonly audioDir?: string;
   readonly voicemail?: { readonly enabled?: boolean };
   readonly readReceipts?: { readonly enabled?: boolean };
@@ -237,6 +248,12 @@ export function resolveConfig(raw: VoiceConfigInput | undefined): VoiceConfig {
       // the same bytes as the `classic` entry, so an install that never touched
       // this field rings exactly as it did before the picker existed.
       tone: toneById(raw?.callCard?.tone).id,
+    },
+    // Off unless a config says otherwise: an unattended card that rings every
+    // five minutes is a loud default to hand someone who never asked for it.
+    experimental: {
+      nudgeWaitingQuestions: raw?.experimental?.nudgeWaitingQuestions ?? false,
+      nudgeAfterMinutes: raw?.experimental?.nudgeAfterMinutes ?? 5,
     },
     audioDir: raw?.audioDir ?? '',
     ...(raw?.voicemail !== undefined ? { voicemail: raw.voicemail } : {}),

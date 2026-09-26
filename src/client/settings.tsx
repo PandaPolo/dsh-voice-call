@@ -126,6 +126,8 @@ interface CardValues {
   readonly palette: string;
   readonly ringtone: boolean;
   readonly tone: string;
+  readonly nudgeWaiting: boolean;
+  readonly nudgeAfterMinutes: number;
 }
 
 const FALLBACK: CardValues = {
@@ -137,6 +139,8 @@ const FALLBACK: CardValues = {
   palette: 'host',
   ringtone: true,
   tone: DEFAULT_TONE,
+  nudgeWaiting: false,
+  nudgeAfterMinutes: 5,
 };
 
 /**
@@ -173,6 +177,40 @@ const RINGTONE_OPTIONS: readonly { readonly id: string; readonly label: string }
 const TONE_OPTIONS: readonly { readonly id: string; readonly label: string }[] =
   TONES.map((tone) => ({ id: tone.id, label: tone.label }));
 
+/**
+ * EXPERIMENTAL: whether a question nobody answers should ring the card at all.
+ * Off unless opened — a card that appears unexplained is worse than a question
+ * that waits quietly.
+ */
+const NUDGE_OPTIONS: readonly { readonly id: string; readonly label: string }[] = [
+  { id: 'on', label: '开' },
+  { id: 'off', label: '关' },
+];
+
+/**
+ * How long to wait before ringing. Presets rather than a number box: the
+ * question is "how long am I usually gone?", and 5 vs 6 minutes is not a
+ * decision anyone can make cold. The server accepts 1–30.
+ */
+const NUDGE_WAITS = [
+  { value: 1, label: '1 分钟' },
+  { value: 5, label: '5 分钟' },
+  { value: 10, label: '10 分钟' },
+  { value: 30, label: '30 分钟' },
+] as const;
+
+const NUDGE_WAIT_OPTIONS: readonly { readonly id: string; readonly label: string }[] =
+  NUDGE_WAITS.map((wait) => ({ id: String(wait.value), label: wait.label }));
+
+/** The nearest preset to a stored patience, so a hand-written 7 shows as 5 分钟. */
+function waitOf(minutes: number): number {
+  let best: number = NUDGE_WAITS[0].value;
+  for (const wait of NUDGE_WAITS) {
+    if (Math.abs(wait.value - minutes) < Math.abs(best - minutes)) best = wait.value;
+  }
+  return best;
+}
+
 function readValues(form: ConfigFormLike | undefined): CardValues {
   return {
     voice: (field(form, 'tts', 'voice') as string | undefined) ?? FALLBACK.voice,
@@ -183,6 +221,8 @@ function readValues(form: ConfigFormLike | undefined): CardValues {
     palette: (field(form, 'callCard', 'palette') as string | undefined) ?? FALLBACK.palette,
     ringtone: (field(form, 'callCard', 'ringtone') as boolean | undefined) ?? FALLBACK.ringtone,
     tone: (field(form, 'callCard', 'tone') as string | undefined) ?? FALLBACK.tone,
+    nudgeWaiting: (field(form, 'experimental', 'nudgeWaitingQuestions') as boolean | undefined) ?? FALLBACK.nudgeWaiting,
+    nudgeAfterMinutes: (field(form, 'experimental', 'nudgeAfterMinutes') as number | undefined) ?? FALLBACK.nudgeAfterMinutes,
   };
 }
 
@@ -423,12 +463,34 @@ export function VoiceCallSettingsCard(props: BundleConfigProps): ReactNode {
           the previous shape, and it cost more than it saved: the controls were
           harder to find than they were to show, and the card still had to be
           scrolled to reach 运行环境 anyway. */}
-      <Row label="振铃超时（秒）">
+      <Row label="铃声持续时间">
         <input className="dsvc-set-number" type="number" min={10} max={600} step={5}
           value={Math.round(values.ringTimeoutMs / 1000)} disabled={disabled}
           onChange={(event) => setDraft((prev) => ({ ...prev, ringTimeoutMs: Number(event.target.value) * 1000 }))}
           onBlur={(event) => void write([{ op: 'set', path: ['callCard', 'ringTimeoutMs'], value: Number(event.target.value) * 1000 }])} />
       </Row>
+      {/* EXPERIMENTAL. A question the model asked is a promise the harness makes
+          to nobody: it waits with no timeout at all, and the agent parked on it
+          cannot escalate, so "I forgot I had a question out" is unfixable from
+          inside the conversation. This row is the one thing that says it out
+          loud — and it only rings a card. Answering still happens in the chat. */}
+      <Row label="等问题振铃（实验性新功能）">
+        <Choice value={values.nudgeWaiting ? 'on' : 'off'} options={NUDGE_OPTIONS} disabled={disabled}
+          onPick={(mode) => void write([{ op: 'set', path: ['experimental', 'nudgeWaitingQuestions'], value: mode === 'on' }])} />
+      </Row>
+      {values.nudgeWaiting
+        ? (
+            <>
+              <Row label="冷场多久后振铃">
+                <Choice value={String(waitOf(values.nudgeAfterMinutes))} options={NUDGE_WAIT_OPTIONS} disabled={disabled}
+                  onPick={(wait) => void write([{ op: 'set', path: ['experimental', 'nudgeAfterMinutes'], value: Number(wait) }])} />
+              </Row>
+              <p className="dsvc-set-note">
+                只提醒，不代你回答：到点弹一张来电卡片说有问题等你，你回到对话里选哪个都一样算数，卡片会自己收掉。
+              </p>
+            </>
+          )
+        : null}
       <Row label="卡片主题">
         <Choice value={values.theme} options={THEMES} disabled={disabled}
           onPick={(theme) => void write([{ op: 'set', path: ['callCard', 'theme'], value: theme }])} />
