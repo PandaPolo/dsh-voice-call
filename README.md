@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
-  <img src="https://img.shields.io/badge/tests-262%20green-1f883d" alt="262 个测试全绿" />
+  <img src="https://img.shields.io/badge/tests-284%20green-1f883d" alt="284 个测试全绿" />
 </p>
 
 <p align="center">
@@ -79,10 +79,34 @@ agent 选择对世界说出的第一句话是：
 - `transcribe({ source, to? })` —— 语音转文字成为用户消息（whisper-local / openai / macOS 原生）；`to` 可跨会话投递（需 dsh-crosstalk）。`source.file` 只能是**音频目录里面**的文件（默认 `~/.dsh/voice`），越界的路径会被拒绝并说明原因；录音走 `source.record`。
 - `/voice` 命令 —— 状态查询、`on|off` 朗读开关、`speak <text>` 直接说话。
 - **9 个 CustomVoice 音色**，含 2 个中文方言：`aiden` · `dylan`（北京话）· `eric`（四川话）· `ono_anna` · `ryan` · `serena` · `sohee` · `uncle_fu` · `vivian`。
+- **等问题振铃（0.3.7，实验性，默认关）** —— agent 弹出问题在等你选，而你已经走开时，插件会让来电卡片响起来提醒你：卡片写着「有 2 个关于「部署方案」的问题在等你回答，已经等了 5 分钟」，按**接听**会念一句「有两个关于「部署方案」的问题需要你回答」，念完卡片自己退。它**永远不替你回答**——选择仍然在对话里做，你答完卡片自己消失。等多久可在设置卡里选（1/5/10/30 分钟），默认 5 分钟。
 - **durableEvents 开关** —— 会话事件日志默认关闭（见"兼容性"）：在验证过的那一版 harness 上，开启会让会话历史无法加载。
-- **已发布 npm**：`dsh-voice-call@0.3.6` 可直接安装。
+- **已发布 npm**：`dsh-voice-call@0.3.7` 可直接安装。
 
-## 🆕 0.3.5 —— 这一版几乎全是「不用你操心」
+## 🆕 0.3.7 —— 它会给你打电话，提醒你有问题在等你
+
+以前「agent 停下来问你一件事」和「agent 永远停在那里」长得一模一样：harness 对问题的等待**没有任何超时**（`dsh-user-questions` 整条链上一个计时器都没有），而卡在问题上的 agent 也没法催你——它的循环停着。于是你走开五分钟，它就在那儿等五分钟。
+
+这一版让插件替它看一眼表：
+
+| 你会碰到什么 | 现在 |
+|---|---|
+| 问题弹出来，你走开了 | 到点（默认 5 分钟，可调 1/5/10/30）弹一张来电卡片：「有 2 个关于「部署方案」的问题在等你回答，已经等了 5 分钟」 |
+| 你想听它念一遍 | 按**接听**，它念一句「有两个关于「部署方案」的问题需要你回答，请回到对话里选择」，念完卡片自己退 |
+| 你回到对话里把题答了 | 卡片**自己收掉**，不需要你去关 |
+| 你在卡片上按了拒接/稍后再说 | 只是把卡片弄没。**它从不替你回答**，问题还在原地等你 |
+| 一批里有两道不相关的题 | 只报数量（「有 2 个问题」），不拿第一道题的标题给整批贴标签 |
+| 卡片弹出来了但没有声音 | 卡片会写明原因：「浏览器拦住了铃声 —— 点一下这个页面就会响」。浏览器拒绝自动播放时本来就点一下就恢复，以前它只是不告诉你 |
+
+它默认**关着**——设置卡里「等问题振铃（实验性新功能）」打开才生效，等多久在同一张卡上选。
+
+这一版还修了两处「插件能把宿主带走」的地方，都是由这个实验功能暴露出来的：卡片应答的处理是跑在网页路由的请求处理里的，插件抛出的一点异常以前会变成进程级的未捕获异常，把整个 `dsh web` 打死（现在围栏住，回一个带原因的响应）；以及插件自己的配置 schema 以前**没有任何测试**真的走一遍宿主的校验——一个 `volatile` 套 `volatile` 就能让插件完全不激活，而 270 个测试全绿。现在这两类都有测试拦着。
+
+顺带一句：设置卡里「振铃超时（秒）」这一行改名叫「**铃声持续时间**」，功能一个字节没动，只是原来那个名字让人以为它在管别的事。
+
+---
+
+## 0.3.6 / 0.3.5 —— 修账与三平台
 
 上一版把功能装上（一键装配、11 条可选铃声、来电卡片）。这一版是我回头把后端逐行查了一遍之后修的账——**功能没坏，坏的是功能对你的承诺**，而且原来的测试全都是绿的，所以它得靠人去读代码才看得出来。
 
@@ -208,6 +232,9 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
     readReplies: false         # 朗读回复开关（也可在会话里 /voice on 临时开启）
     durableEvents: false       # 保持 false（见"兼容性"）
     audioDir: ~/.dsh/voice     # 音频文件目录
+    experimental:              # 实验性功能，默认全关
+      nudgeWaitingQuestions: false   # 问题超时没人答就弹来电卡片提醒（默认关）
+      nudgeAfterMinutes: 5           # 等多久算「卡住了」，1–30 分钟
     # 以下为 v0.3 预留字段，v0.1 无需配置：
     # voicemail: { enabled: false }
     # readReceipts: { enabled: false }
@@ -230,6 +257,8 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
 | `callCard.theme` | `system` / `light` / `dark` | 卡片主题，默认跟随宿主 |
 | `callCard.palette` | 6 套预设 | 卡片强调色，默认 `azure` |
 | `readReplies` | `true` / `false` | 朗读回复，默认 `false` |
+| `experimental.nudgeWaitingQuestions` | `true` / `false` | **实验性**，默认 `false`。开启后，agent 的问题超过 `nudgeAfterMinutes` 没人回答就会弹一张来电卡片提醒（按接听念一句，念完自动退；永不替你回答） |
+| `experimental.nudgeAfterMinutes` | 1–30 | 等多久算「卡住了」，默认 5 分钟 |
 | `durableEvents` | `true` / `false` | 保持 `false`（见"兼容性"） |
 | `audioDir` | 路径 | 音频保存目录，默认 `~/.dsh/voice` |
 

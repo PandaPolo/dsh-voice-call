@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
-  <img src="https://img.shields.io/badge/tests-262%20green-1f883d" alt="262 tests green" />
+  <img src="https://img.shields.io/badge/tests-284%20green-1f883d" alt="284 tests green" />
 </p>
 
 <p align="center">
@@ -83,10 +83,34 @@ If you fork, improve, or build on this project, please keep this note — it is 
 - `transcribe({ source, to? })` — speech-to-text into a user message (whisper-local / openai / macOS native); optional crosstalk delivery to another session. `source.file` has to name a file **inside** the audio directory (`~/.dsh/voice` by default); anything else is refused with the reason, and microphone capture goes through `source.record`.
 - `/voice` command — status, `on|off` narration toggle, `speak <text>`.
 - **9 CustomVoice speakers** including two Chinese dialects: `aiden` · `dylan` (Beijing) · `eric` (Sichuan) · `ono_anna` · `ryan` · `serena` · `sohee` · `uncle_fu` · `vivian`.
+- **Ring for unanswered questions (0.3.7, experimental, off by default)** — when the agent has a question waiting and you have walked away, the plugin rings the call card: "有 2 个关于「部署方案」的问题在等你回答，已经等了 5 分钟". Pressing **接听** reads one sentence aloud ("有两个关于「部署方案」的问题需要你回答") and then the card retires. It **never answers for you** — the choice still happens in the chat, and the card goes away on its own once you make it. How long to wait is a setting (1/5/10/30 minutes).
 - **durableEvents gate** — session-event logging is off by default (see Compatibility): on the harness release where it was tested, turning it on makes the session history unloadable.
-- **Published on npm**: install `dsh-voice-call@0.3.6` directly.
+- **Published on npm**: install `dsh-voice-call@0.3.7` directly.
 
-## 🆕 What changed in 0.3.5
+## 🆕 What changed in 0.3.7
+
+"The agent stopped to ask you something" and "the agent stopped forever" used to look identical: the harness puts **no timeout** on a question (there is not a single timer in `dsh-user-questions`), and an agent parked on one cannot nudge you — its loop is stopped. So if you walked away for five minutes, it waited five minutes.
+
+This release has the plugin watch the clock on its behalf:
+
+| What you would notice | Now |
+|---|---|
+| A question appears and you walk away | after the patience (5 minutes by default, 1/5/10/30 selectable) a call card appears: "有 2 个关于「部署方案」的问题在等你回答，已经等了 5 分钟" |
+| You want to hear it | press **接听**: it reads one sentence naming what is waiting, then the card retires |
+| You go back and answer in the chat | the card **takes itself down**; nothing to dismiss |
+| You press 拒接/稍后再说 on the card | that only silences the card. **It never answers for you** — the question is still there |
+| A batch holds two unrelated questions | it reports the count ("有 2 个问题") instead of labelling the batch with the first question's title |
+| The card appears with no sound | the card now says why: "浏览器拦住了铃声 —— 点一下这个页面就会响". A browser that refuses autoplay always recovered on the first click; what was missing was being told |
+
+It ships **off**: turn on 「等问题振铃（实验性新功能）」 in the settings card, and pick the patience on the same row.
+
+This release also fences two ways the plugin could take the host down — both surfaced by this experiment. A card's answer is handled inside a web route, so an exception thrown there used to become a process-level uncaught exception and kill `dsh web` (it is now fenced and answers with a reason). And the plugin's own config schema had **no test** that walked the host's validation at all — one `volatile` inside another `volatile` is enough to stop the plugin from activating at all, while 270 tests stayed green. Both classes are now covered by tests.
+
+One more: the settings row 「振铃超时（秒）」 is now 「**铃声持续时间**」. Not a byte of behaviour changed; the old name read as though it governed something else.
+
+---
+
+## 0.3.6 / 0.3.5 — the bill, and three platforms
 
 The previous release put the features in: one-click provisioning, eleven ringtones you can pick, the call card. This release is the bill paid afterwards — I went back through the backend line by line, and what I found was not broken features but **features that did not keep their promises**. Every one of them shipped with a green test suite, which is the actual lesson.
 
@@ -212,6 +236,9 @@ Full example (Windows):
     readReplies: false         # read replies aloud; can be toggled live via /voice on
     durableEvents: false       # keep false (see Compatibility)
     audioDir: ~/.dsh/voice     # audio file directory
+    experimental:              # experimental features, all off by default
+      nudgeWaitingQuestions: false   # ring the card when a question goes unanswered
+      nudgeAfterMinutes: 5           # how long counts as unanswered, 1–30
     # Reserved for v0.3 — not needed in v0.1:
     # voicemail: { enabled: false }
     # readReceipts: { enabled: false }
@@ -236,6 +263,8 @@ Config fields at a glance:
 | `readReplies` | `true` / `false` | narration, default `false` |
 | `durableEvents` | `true` / `false` | keep `false` (see Compatibility) |
 | `audioDir` | path | audio output dir, default `~/.dsh/voice` |
+| `experimental.nudgeWaitingQuestions` | `true` / `false` | **experimental**, default `false`. When on, a question nobody answers for `nudgeAfterMinutes` rings the call card once (接听 reads a sentence, then the card retires; it never answers for you) |
+| `experimental.nudgeAfterMinutes` | 1–30 | how long counts as unanswered, default 5 minutes |
 
 > The engine command actually executed looks like:
 > `crispasr --backend qwen3-tts-customvoice -m <talker.gguf> --codec-model <codec.gguf> --voice <speaker> --tts "<text>" --tts-output <out.wav>` (CrispASR ≥ 0.8.28).
