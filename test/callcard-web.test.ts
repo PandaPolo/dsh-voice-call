@@ -18,8 +18,7 @@ after(async () => {
   for (const close of sites) await close();
 });
 
-async function mount(appearance: CallCardAppearance = DEFAULT): Promise<string> {
-  const board = new CallBoard(() => 0);
+async function mount(appearance: CallCardAppearance = DEFAULT, board = new CallBoard(() => 0)): Promise<string> {
   const server = createServer((req, res) => {
     serveCallRoute(board, () => appearance, req, res);
   });
@@ -73,6 +72,38 @@ describe('call-card routes', () => {
     });
     assert.equal(own.status, 404, 'same-origin gets as far as the board, which does not know that call');
     assert.equal((await own.json() as { ok: boolean }).ok, false);
+  });
+
+  it('contains a waiter that throws instead of letting it reach the process', async () => {
+    // `board.answer` runs the call's waiter synchronously inside this handler.
+    // A waiter that throws must not escape: an exception leaving the request
+    // handler is an uncaught exception, and `dsh web` dies with the card still
+    // on screen. This is the fence that the experimental answer-nudge learned
+    // this the hard way.
+    const board = new CallBoard(() => 0);
+    board.open(
+      { callId: 'call-explodes', text: 't', voice: 'v', caller: { name: 'n' }, ringAt: 0 },
+      () => {
+        throw new TypeError("Cannot read properties of undefined (reading 'id')");
+      },
+    );
+    const url = await mount(DEFAULT, board);
+    const response = await fetch(`${url}/voice/call/answer`, {
+      method: 'POST',
+      headers: { 'sec-fetch-site': 'same-origin', origin: url },
+      body: JSON.stringify({ callId: 'call-explodes', decision: 'accepted' }),
+    });
+    assert.equal(response.status, 500);
+    const payload = await response.json() as { ok: boolean; reason?: string };
+    assert.equal(payload.ok, false);
+    assert.match(payload.reason ?? '', /reading 'id'/, 'the reason the human sees names the failure');
+    // And the site is still serving — the process survived the throw.
+    const alive = await fetch(`${url}/voice/call/answer`, {
+      method: 'POST',
+      headers: { 'sec-fetch-site': 'same-origin', origin: url },
+      body: JSON.stringify({ callId: 'call-not-there', decision: 'accepted' }),
+    });
+    assert.equal(alive.status, 404, 'a throwing waiter does not take the route down');
   });
 
   it('carries the ringtone flag to the card through the state snapshot', async () => {

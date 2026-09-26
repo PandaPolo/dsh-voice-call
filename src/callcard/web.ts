@@ -245,8 +245,28 @@ function serveAnswer(board: CallBoard, req: IncomingMessage, res: ServerResponse
       return;
     }
     const answer = payload as { callId: string; decision: AnswerDecision };
-    const result = board.answer(answer.callId, answer.decision);
-    res.writeHead(result.ok ? 200 : 404, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    // `board.answer` runs the call's waiter synchronously, and a waiter is
+    // plugin code: an exception in one belongs to that call, not to the host.
+    // Without this fence a throwing waiter propagates out of the request
+    // handler into the process' uncaught handler, and `dsh web` dies with the
+    // card still on screen — which is how the experimental answer-nudge took
+    // the whole host down.
+    let result: { ok: boolean; reason?: string };
+    // A call the board does not know is still a 404 (the client's own "this
+    // card is stale, take it down" path); only a waiter that threw gets the
+    // 5xx, so the two never get conflated.
+    let status = 404;
+    try {
+      result = board.answer(answer.callId, answer.decision);
+      if (result.ok) status = 200;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // No logger reaches this deep (the route is a bare handler), and the
+      // reason is not lost: it goes back on the response and the card shows it.
+      result = { ok: false, reason: `answering the call failed: ${message}` };
+      status = 500;
+    }
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
     res.end(JSON.stringify(result));
   });
 }
