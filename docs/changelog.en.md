@@ -6,6 +6,34 @@
 >
 > 中文版：[changelog.md](changelog.md)
 
+## What changed in 0.3.8 — dsh 0.2.0-rc.1 stopped warning and started skipping
+
+**The host turned the peer range into a load decision.** 0.2.0-rc.1 ships `evaluatePluginCompatibility` in `@deepseek-ai/dsh-app-boot`: it walks the plugin manifest's `peerDependencies`, looks only at `@deepseek-ai/dsh` and `@deepseek-ai/dsh-*`, and tests the running version against each range with semver (`includePrerelease: true`). One range that does not admit it and the host **does not load the bundle at all** — tools, routes and client nodes all gone, leaving a single startup line:
+
+```
+dsh: skipping profile bundle "dsh-voice-call": Error: Plugin dsh-voice-call@0.3.7
+is incompatible with dsh 0.2.0-rc.1: peerDependencies {…}. … grant the
+exact-version exemption with `dsh plugin allow-version`, then retry …
+```
+
+`^0.1.7-rc.2` never meant "anything from 0.1.7 on"; it means exactly `>=0.1.7-rc.2 <0.2.0`. It used to cost a warning, so everyone wrote it loosely. Now it decides whether the plugin exists. `@deepseek-ai/cordis` and `@deepseek-ai/schemastery` are not part of the check — the host only reads the `dsh` series.
+
+**What this release changed — the manifest, not the behaviour:**
+
+| Area | Change |
+|---|---|
+| peerDependencies | Every `@deepseek-ai/dsh-*` entry is now `^0.1.7-rc.2 \|\| ^0.2.0-rc.1` — both baselines claimed, and 0.3.0 not claimed, because it has not been run against |
+| devDependencies / CI | Pinned to 0.2.0-rc.1, with cordis following the host to 4.0.4 |
+| Seams that were never declared | `dsh-client-ui-chat`, `dsh-client-ui-conversation`, `dsh-client-ui-settings`, `dsh-api-session-controller` and `dsh-host-webserver` are now peers. `src/` imports all five; a seam the code touches but the manifest omits is invisible to the gate, so the host cannot catch it moving |
+| Source | Not one executable line changed (only one comment's version stamp). The three seams the plugin works along are intact on the new tree, down to the line numbers: `tools/execute` at `dsh-tools/lib/index.js:3331`, `user-questions/request` at `dsh-user-questions/lib/index.js:69`, `webServer.register(route): () => void` at `dsh-host-webserver/lib/types/index.d.ts:90`. The client bundle still needs nothing from the host in the browser but `react` |
+| Tests | 284 → **289**, all green on 0.2.0-rc.1. The same source was then run twice more, once per dependency tree: three `tsc` passes (server / client / test) and 289 green cases on 0.2.0-rc.1, and the same again on 0.1.7-rc.2 |
+
+**`test/harness-compat.test.ts` invites the host's own predicate into the suite.** It runs the real manifest through `evaluatePluginCompatibility` for every baseline the test file claims, and pins three more things besides: the release `devDependencies` locks must be one of the claimed baselines; every `@deepseek-ai/dsh*` package `src/` imports must be a declared peer; and 0.3.0 — a major nobody has run against — must **fail** the check, because a guard that can never go red is not a guard.
+
+This is the same class of lesson as 0.3.7's: there, no test had ever walked the host's config validation; here, no test had ever walked the host's load decision. The new file paid for itself on its first run — the five undeclared peers above are what it found.
+
+**Already on 0.2.0-rc.1?** Updating to 0.3.8 brings the plugin back. `dsh plugin allow-version` writes a pass for one plugin version on one runtime version, which is a way of running an untested combination on purpose, not a way of making it tested. To see the host's own verdict: the first lines of `dsh --profile web --dump-config` are exactly that.
+
 ## 🆕 What changed in 0.3.7
 
 "The agent stopped to ask you something" and "the agent stopped forever" used to look identical: the harness puts **no timeout** on a question (there is not a single timer in `dsh-user-questions`), and an agent parked on one cannot nudge you — its loop is stopped. So if you walked away for five minutes, it waited five minutes.

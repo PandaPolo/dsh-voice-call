@@ -10,7 +10,7 @@
 | 平台 | Windows 10/11 · macOS · Linux |
 | Node.js | **≥ 20**（插件运行要求）；运行测试需要 22.18+（Node 原生 TS 类型剥离） |
 | pnpm | 9+（CI 使用 pnpm 11） |
-| dsh CLI | `@deepseek-ai/dsh`，当前 0.1.7-rc.2 |
+| dsh CLI | `@deepseek-ai/dsh`，0.1.7-rc.2 或 0.2.0-rc.1 |
 | 本地语音引擎 | CrispASR ≥ 0.8.28 + Qwen3-TTS GGUF 模型（推荐，否则没有本地合成音色） |
 | 模型提供商 | dsh 需要已配置可用的 LLM API 凭据（agent 本身依赖） |
 
@@ -18,7 +18,7 @@
 
 ```bash
 npm install -g @deepseek-ai/dsh
-dsh --version    # 期望输出 0.1.7-rc.2
+dsh --version    # 期望输出 0.2.0-rc.1（0.1.7-rc.2 同样受支持）
 ```
 
 - 确认模型提供商凭据已配置（dsh 跑 agent 需要 API key）。
@@ -156,6 +156,7 @@ dsh web
 |---|---|
 | `dsh web` 启动崩溃 | `cordis.patch.yml` 里同一 id 被 insert 了两次——删掉重复行，改为按 id 更新 |
 | 插件似乎没加载 | `dsh --profile web --dump-config` 检查配置树是否包含 `dsh-voice-call`；确认插件装到了正确的 profile |
+| 升级 dsh 之后插件整个不见了（工具、设置卡、来电卡片一起没了） | 0.2.0-rc.1 起宿主按 `peerDependencies` 决定加载还是跳过，`dsh --profile web --dump-config` 的头一行就是 `dsh: skipping profile bundle "dsh-voice-call": … is incompatible with dsh <版本>`。把插件更到声明了该基线的版本（0.3.8 起声明 `^0.1.7-rc.2 \|\| ^0.2.0-rc.1`）。`dsh plugin allow-version` 能给"某个插件版本 + 某个运行时版本"发一张精确豁免状，但那是明知未验证仍要跑，出了事自己承担 |
 | 插件显示"异常"、完全不激活 | 配置 schema 被写坏了（例如给一个已经 `volatile` 的对象再套 `volatile`）——宿主会在启动时打印 `ValidationError`，看那一行指出的是哪个字段 |
 | 合成失败（exit ≠ 0） | 检查 `bin` / `model` / `codec` 三个路径是否为存在的绝对路径；codec 模型不能缺；CrispASR 需 ≥ 0.8.28 |
 | 来电振铃后没有声音 | 先看卡片有没有写明「浏览器拦住了铃声」——那是浏览器的自动播放策略，点一下页面就会响；否则是播放问题：Windows 确认输出为 wav，Linux 安装 ALSA 工具，macOS 用 `afplay` |
@@ -170,11 +171,11 @@ dsh web
 
 | 方面 | 状态 |
 |---|---|
-| harness | 0.1.7-rc.2（peerDependencies 声明 `^0.1.7-rc.2`，devDependencies 与 CI 锁在同一版；0.1.2 起客户端节点引擎并入 `dsh-client-ui-conversation`/`dsh-client-ui-chat`，不再依赖 `dsh-client-runtime`）。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 Web 组合禁用了 host 平面的 `tool-jobs`（在 0.1.7-rc.2 上依旧成立）。 |
+| harness | 同时支持 **0.1.7-rc.2 与 0.2.0-rc.1**：peerDependencies 声明 `^0.1.7-rc.2 \|\| ^0.2.0-rc.1`，devDependencies 与 CI 锁在 0.2.0-rc.1（cordis 4.0.4）。0.1.2 起客户端节点引擎并入 `dsh-client-ui-conversation`/`dsh-client-ui-chat`，不再依赖 `dsh-client-runtime`。**从 0.2.0-rc.1 起这份声明是加载判定**：宿主用 `evaluatePluginCompatibility`（`@deepseek-ai/dsh-app-boot`，semver `includePrerelease`）逐个检查 `@deepseek-ai/dsh*` 的 peer 范围，只要有一个不含正在运行的版本，整个 bundle 被跳过——启动时打一行 `dsh: skipping profile bundle "<id>"`，工具、路由、客户端节点全都不在。0.3.7 就是这样在 0.2.0-rc.1 上消失的。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 Web 组合禁用了 host 平面的 `tool-jobs`（两个基线上都成立）。 |
 | 会话事件 | 这条限制是在 0.1.5-rc.6 上实测到的：持久化读路径遇到「未知且未标 `ignorable`」的事件会拒绝整份日志，而 `Session.append` 不给插件事件写入 `ignorable` 的入口。0.1.7-rc.2 一侧读到了内置事件清单与 `ignorable` 保留逻辑，但本插件**没有真机验证过开启后的历史可加载性**，所以 `durableEvents` 继续默认 `false`；验证通过前请勿开启。 |
 | 播放 | Windows：内置 `SoundPlayer`（已实测）。macOS：`afplay`。Linux：`aplay`（需安装 ALSA 工具）。`edge-tts` 只合成不播放——要听到声音请用本地 wav 后端。 |
 | 录音 | 仅 macOS（原生 + ffmpeg）。Windows/Linux 的 `transcribe({record})` 会明确提示不可用。 |
 | Shell 沙箱 | 本地引擎命令以显式 `danger-full-access` 策略运行——引擎二进制、GGUF 模型、音频目录跨越了受限沙箱模式无法覆盖的多个根。**部署前请评估此信任边界。** |
 | 写接口 | 五个改状态的端点（`/voice/call/answer`、`/voice/provision/{prepare,adopt,cancel,cleanup}`）先查 `Sec-Fetch-Site`，跨站的直接 403；没有这个头时退回比对 `Origin` 与 `Host`。宿主 webserver 本身不带任何鉴权（只有 gzip 中间件），`host` 还可以配成 `0.0.0.0`，所以这道门是浏览器攻击面上唯一的屏障。本机进程（curl 等）不带这些头，仍然可调用——回环端口没有共享密钥可查，这是明说的残余风险。 |
 | 来电卡片 | 走 webserver 路由缝隙（SSE `/voice/call/events` + `POST /voice/call/answer`，载荷即预留的 `VoiceAnswerPayload` 契约）；仅 web 组合可用，headless 自动回落弹窗/拒接。同源信任级别与音频路由一致。应答处理里插件抛出的异常被围栏在路由内（回 5xx 带原因），不会变成进程级未捕获异常——0.3.7 补的。 |
-| 测试 | 284 个单元/路由测试在 Linux / Windows / macOS 上全绿（`pnpm test`，CI 三平台矩阵）；`pnpm typecheck` 同时检查 `src/`、`src/client/` 和 `test/`——测试代码此前从不在类型检查范围内。插件自己的配置 schema 也走一遍宿主的校验入口。 |
+| 测试 | 289 个单元/路由测试在 Linux / Windows / macOS 上全绿（`pnpm test`，CI 三平台矩阵）；`pnpm typecheck` 同时检查 `src/`、`src/client/` 和 `test/`——测试代码此前从不在类型检查范围内。插件自己的配置 schema 走一遍宿主的校验入口，插件声明的 harness 兼容性走一遍宿主的判定函数（`test/harness-compat.test.ts`），后者同时钉住"devDependencies 锁的版本必须在声称的基线里"和"没跑过的大版本不许声称"。 |

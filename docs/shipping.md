@@ -6,7 +6,7 @@ verified locally except the push and the publish themselves.
 
 ## 0. Preflight (verified locally)
 
-- `pnpm test` — 262 green on the current baseline: arg-schema units (the exact-one
+- `pnpm test` — 289 green on the current baseline: arg-schema units (the exact-one
   `{file|record}` union, `speak`'s optional `voice`/`rate`), backend
   selection with faked probes, the fake text-to-text backend end-to-end
   through both tool pipelines, the `voice-note` renderer (node.data from a
@@ -34,6 +34,14 @@ verified locally except the push and the publish themselves.
   included — is a `peerDependency` (the ecosystem convention; regular deps
   would install duplicate copies into DSH profiles and break tool dispatch),
   mirrored in devDependencies. There is no `dependencies` block at all.
+- **Baseline gate**: `test/harness-compat.test.ts` runs the host's own
+  `evaluatePluginCompatibility` over the real manifest, for every release named
+  in its `SUPPORTED` list. Since dsh 0.2.0-rc.1 that predicate is a load
+  decision, not a warning — an unsatisfied `@deepseek-ai/dsh*` peer range makes
+  the host skip the entire bundle — so a baseline bump is not done until the
+  peer range has been widened in the same commit and `SUPPORTED` lists both the
+  old and the new release. Packages `src/` imports must appear there too: a seam
+  the code touches but the manifest omits is invisible to the gate.
 
 ## 1. Push the GitHub repo
 
@@ -109,8 +117,9 @@ npm publish              # prepublishOnly runs the build
 
 Bump `version` in the same commit that changes what users get. A harness
 baseline bump with no functional change takes a patch bump (`0.1.1` for the
-0.1.2-rc.1 retarget); a baseline bump that ships new behaviour takes a minor
-(`0.3.0` for 0.1.5-rc.2 plus the card restyle and the answer-to-playback leg).
+0.1.2-rc.1 retarget, `0.3.8` for the 0.2.0-rc.1 retarget); a baseline bump that
+ships new behaviour takes a minor (`0.3.0` for 0.1.5-rc.2 plus the card restyle
+and the answer-to-playback leg).
 
 ## 5. Follow-ups
 

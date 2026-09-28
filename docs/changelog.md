@@ -3,6 +3,34 @@
 > 从 [README](../README.md) 搬出来的发版账本。首页只留"最新版一句话"，这里按版本倒序保留全文。
 > 每个版本的发布说明在 [GitHub Releases](https://github.com/PandaPolo/dsh-voice-call/releases) 也有一份。
 
+## 0.3.8 —— dsh 0.2.0-rc.1 不再把插件整个跳过
+
+**宿主把 peer 范围变成了加载判定。** 0.2.0-rc.1 的 `@deepseek-ai/dsh-app-boot` 里有一个 `evaluatePluginCompatibility`：它遍历插件清单的 `peerDependencies`，只看 `@deepseek-ai/dsh` 与 `@deepseek-ai/dsh-*` 这几条，拿正在运行的版本按 semver（`includePrerelease: true`）逐个套。只要有一条不含它，宿主就**不加载这个 bundle**——工具、路由、客户端节点一起消失，启动时只留一行：
+
+```
+dsh: skipping profile bundle "dsh-voice-call": Error: Plugin dsh-voice-call@0.3.7
+is incompatible with dsh 0.2.0-rc.1: peerDependencies {…}. … grant the
+exact-version exemption with `dsh plugin allow-version`, then retry …
+```
+
+`^0.1.7-rc.2` 的意思从来不是"0.1.7 之后都行"，它严格等于 `>=0.1.7-rc.2 <0.2.0`。以前它只换来一句警告，所以大家都写得随手；现在它决定插件在不在。而 `@deepseek-ai/cordis`、`@deepseek-ai/schemastery` 那两条宿主不看——它只认 `dsh` 系列。
+
+**这一版改了清单，没改行为：**
+
+| 项目 | 改动 |
+|---|---|
+| peerDependencies | 每条 `@deepseek-ai/dsh-*` 写成 `^0.1.7-rc.2 \|\| ^0.2.0-rc.1`——两个基线都声称支持，0.3.0 不声称（没跑过就不写） |
+| devDependencies 与 CI | 锁到 0.2.0-rc.1，cordis 跟着宿主升到 4.0.4 |
+| 漏声明的缝隙 | `dsh-client-ui-chat`、`dsh-client-ui-conversation`、`dsh-client-ui-settings`、`dsh-api-session-controller`、`dsh-host-webserver` 补进 peer。`src/` 真的在 import 它们，而清单不写宿主就看不见这条缝隙，也就不会替你把住 |
+| 源码 | 一行没动（只把一处注释里的版本号补上新基线）。三条赖以工作的缝隙在新树上原样存在，连行号都一样：`tools/execute` 在 `dsh-tools/lib/index.js:3331`，`user-questions/request` 在 `dsh-user-questions/lib/index.js:69`，`webServer.register(route): () => void` 在 `dsh-host-webserver/lib/types/index.d.ts:90`。客户端 bundle 在浏览器里唯一还要宿主给的东西仍然只有 `react` |
+| 测试 | 284 → **289**，全部在 0.2.0-rc.1 上跑过。同一份源码另外在两套依赖树下各跑一遍：`tsc` 三份（服务端 / 客户端 / 测试）全过，289 个用例全绿——0.2.0-rc.1 一遍，0.1.7-rc.2 一遍 |
+
+**新增 `test/harness-compat.test.ts`——把宿主自己的判定函数请进测试。** 它跑真清单，声称支持的每一个基线都要过；并且钉住三件事：devDependencies 锁的那个版本必须在声称的基线里；`src/` import 到的 `@deepseek-ai/dsh*` 包必须都声明成 peer；而 0.3.0（没跑过的大版本）必须**不过**——一条永远不会红的守卫不是守卫。
+
+这个测试是 0.3.7 那条教训的同类项：那次是"配置 schema 没有一条测试走过宿主的校验入口"，这次是"兼容性声明没有一条测试走过宿主的加载判定"。它写完第一次跑就抓到了东西——上面那五个漏声明的包就是这么找出来的。
+
+**给已经在 0.2.0-rc.1 上的人**：更到 0.3.8 插件就回来了。`dsh plugin allow-version` 能为"某个插件版本 + 某个运行时版本"发一张精确豁免状，那是明知未验证仍要跑，不是把未验证变成已验证。想自己确认加载状态：`dsh --profile web --dump-config` 的头几行就是宿主的判定输出。
+
 ## 0.3.7 —— 它会给你打电话，提醒你有问题在等你
 
 以前「agent 停下来问你一件事」和「agent 永远停在那里」长得一模一样：harness 对问题的等待**没有任何超时**（`dsh-user-questions` 整条链上一个计时器都没有），而卡在问题上的 agent 也没法催你——它的循环停着。于是你走开五分钟，它就在那儿等五分钟。

@@ -80,8 +80,9 @@ interface ConfigFormLike {
  * this card actually uses.
  *
  * This, not the slot's `form` prop, is how the card gets write access on
- * 0.1.7-rc.2: the host renders `plugins.bundle.config` with owner props of only
- * `{ view: 'page' }` (dsh-client-ui-plugin-manager `lib/client.js:1973`), while
+ * 0.1.7-rc.2 and 0.2.0-rc.1: the host renders `plugins.bundle.config` with owner
+ * props of only `{ view: 'page' }` (dsh-client-ui-plugin-manager
+ * `lib/client.js:1973`, unchanged at `:2527` in 0.2.0-rc.1), while
  * `plugins.row.config` and `plugins.item` do receive a `form`. The service is
  * the same one those pages derive from, so taking it directly costs nothing and
  * keeps the card on the page where the user expects to find it.

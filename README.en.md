@@ -9,7 +9,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
-  <img src="https://img.shields.io/badge/tests-284%20green-1f883d" alt="284 tests green" />
+  <img src="https://img.shields.io/badge/harness-0.2.0--rc.1-5b5bd6" alt="DSH 0.2.0-rc.1" />
+  <img src="https://img.shields.io/badge/tests-289%20green-1f883d" alt="289 tests green" />
 </p>
 
 <p align="center">
@@ -36,7 +37,7 @@ Three rules the whole project is built on:
 ## 🚀 Install
 
 ```bash
-npm install -g @deepseek-ai/dsh          # needs 0.1.7-rc.2; Node ≥ 20
+npm install -g @deepseek-ai/dsh          # needs 0.1.7-rc.2 or 0.2.0-rc.1; Node ≥ 20
 dsh plugin --profile web add dsh-voice-call
 dsh web
 ```
@@ -77,6 +78,16 @@ The full path from an empty machine to hearing a voice (manual downloads, every 
 
 It ships **off**: turn on 「等问题振铃（实验性新功能）」 in the settings card. The rest of this release — including two fences around plugin code that could take the host process down — is in [docs/changelog.en.md](docs/changelog.en.md).
 
+## 🔌 0.3.8: it no longer vanishes on dsh 0.2.0-rc.1
+
+dsh 0.2.0-rc.1 turned `peerDependencies` from a warning into a load decision: if the declared range does not admit the running version, the host **skips the whole plugin** — its tools, its routes, its client nodes — leaving one startup line, `dsh: skipping profile bundle "dsh-voice-call": … is incompatible with dsh 0.2.0-rc.1`. That is exactly how 0.3.7 disappeared on the new harness, with all 284 of its tests green: no test read the manifest, and none had ever walked the host's predicate.
+
+This release raises the baseline to **0.2.0-rc.1 while keeping 0.1.7-rc.2** (`^0.1.7-rc.2 || ^0.2.0-rc.1`). **No source line changed** — three type checks and all 289 tests run green twice, once per dependency tree, and the three seams the plugin rides on (`tools/execute`, `user-questions/request`, `webServer.register`) sit on the same line numbers as before, while the client bundle still needs nothing from the host in the browser but `react`. The manifest also tells the truth now: `dsh-client-ui-chat`, `dsh-client-ui-conversation`, `dsh-client-ui-settings`, `dsh-api-session-controller` and `dsh-host-webserver` are declared as peers, because `src/` uses them — a seam the code touches but the manifest omits is invisible to the gate, so the host cannot warn you when it moves.
+
+And the declaration is now guarded by the host's own function: `evaluatePluginCompatibility` from `@deepseek-ai/dsh-app-boot` runs over the real manifest in `test/harness-compat.test.ts`, for every baseline we claim. The same file pins two more promises — the version `devDependencies` locks must be one of the claimed baselines, and a major we have not run against (0.3.0) must not be claimed.
+
+Already on 0.2.0-rc.1? Updating to 0.3.8 brings the plugin back. `dsh plugin allow-version` will write a pass for an exact plugin version on an exact runtime, which is a way to run untested combinations, not a way to make them tested.
+
 ## ⚙️ Configuration
 
 Lives in the profile's `cordis.patch.yml`. **Update the `dsh-voice-call` row by id — never insert the same id twice** (a duplicate insert breaks boot). All of it is also editable from the settings card:
@@ -109,8 +120,8 @@ Every field, explained: **[docs/deployment.en.md](docs/deployment.en.md)**.
 
 ## 💻 Compatibility
 
-- **Platforms** — Windows 10/11, macOS and Linux all run in CI, 284 tests green. Playback: built-in `SoundPlayer` on Windows, `afplay` on macOS, `aplay` on Linux (needs ALSA tools); recording is currently macOS only.
-- **Harness** — baseline `0.1.7-rc.2`, declared in peerDependencies and pinned by CI.
+- **Platforms** — Windows 10/11, macOS and Linux all run in CI, 289 tests green. Playback: built-in `SoundPlayer` on Windows, `afplay` on macOS, `aplay` on Linux (needs ALSA tools); recording is currently macOS only.
+- **Harness** — both `0.1.7-rc.2` and `0.2.0-rc.1` are supported: `peerDependencies` declares `^0.1.7-rc.2 || ^0.2.0-rc.1`, with devDependencies and CI pinned to 0.2.0-rc.1. From 0.2.0-rc.1 that declaration decides **load or skip** — not warn — so `test/harness-compat.test.ts` checks it against the host's own predicate whenever a baseline moves.
 - **Keep `durableEvents` at `false`** — there is no registration seam for plugin events, and appending `voice/*` events makes that session history unloadable. Measured on 0.1.5-rc.6; turning it on has not been verified on newer builds.
 - **The local engine runs under `danger-full-access`** — engine binary, GGUF models and the audio directory span more roots than a confined sandbox can cover. **Assess this trust boundary before deploying.**
 
@@ -139,13 +150,13 @@ The same-origin gate on the write endpoints, the call card's routing seam, and t
 ```bash
 pnpm install
 pnpm typecheck   # covers src/, src/client/ and test/
-pnpm test        # node --test, 284 cases
+pnpm test        # node --test, 289 cases
 pnpm build       # tsc + the client bundle
 ```
 
 ## 🗺 Roadmap
 
-Shipped through 0.3.7: the call domain → the dedicated call card → one-click provisioning and eleven ringtones → the three-platform audit → the waiting-question ring. Next: **voicemail for missed calls + AI read receipts** (`src/domain/voicemail.ts`, event types already reserved). v1.0 freezes the schema.
+Shipped through 0.3.8: the call domain → the dedicated call card → one-click provisioning and eleven ringtones → the three-platform audit → the waiting-question ring → keeping up with dsh 0.2.0-rc.1. Next: **voicemail for missed calls + AI read receipts** (`src/domain/voicemail.ts`, event types already reserved). v1.0 freezes the schema.
 
 ## 🤖 Credits — who made this
 

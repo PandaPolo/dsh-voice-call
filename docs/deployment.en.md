@@ -15,7 +15,7 @@
 | Platform | Windows 10/11 · macOS · Linux |
 | Node.js | **≥ 20** (plugin runtime); tests need 22.18+ (Node's native TS type-stripping) |
 | pnpm | 9+ (CI uses pnpm 11) |
-| dsh CLI | `@deepseek-ai/dsh`, currently 0.1.7-rc.2 |
+| dsh CLI | `@deepseek-ai/dsh`, 0.1.7-rc.2 or 0.2.0-rc.1 |
 | Local voice engine | CrispASR ≥ 0.8.28 + Qwen3-TTS GGUF models (recommended — without it there is no local synthesis) |
 | LLM provider | a working API credential for dsh (the agent itself depends on it) |
 
@@ -23,7 +23,7 @@
 
 ```bash
 npm install -g @deepseek-ai/dsh
-dsh --version    # expect 0.1.7-rc.2
+dsh --version    # expect 0.2.0-rc.1 (0.1.7-rc.2 is supported too)
 ```
 
 - Make sure your model-provider credential is configured (dsh needs an API key to run an agent).
@@ -159,6 +159,7 @@ dsh web
 |---|---|
 | `dsh web` crashes at boot | the same id was inserted twice in `cordis.patch.yml` — remove the duplicate, update by id instead |
 | Plugin seems not loaded | `dsh --profile web --dump-config` — check the tree contains `dsh-voice-call`; confirm the plugin went to the right profile |
+| The plugin disappeared after upgrading dsh (tools, settings card, call card all gone) | from 0.2.0-rc.1 the host decides load-or-skip from `peerDependencies`; the first line of `dsh --profile web --dump-config` says `dsh: skipping profile bundle "dsh-voice-call": … is incompatible with dsh <version>`. Update the plugin to a release that declares that baseline (0.3.8 declares `^0.1.7-rc.2 \|\| ^0.2.0-rc.1`). `dsh plugin allow-version` can grant an exact-version exemption for one plugin version on one runtime, which is a way of running an untested combination on purpose, not a way of making it tested |
 | Synthesis fails (exit ≠ 0) | check `bin` / `model` / `codec` are existing absolute paths; the codec model must be present; CrispASR ≥ 0.8.28 |
 | Ring accepted, no sound | first check whether the card itself said 「浏览器拦住了铃声」 — that is the browser's autoplay policy, and one click on the page restores it. Otherwise it is a playback issue: on Windows make sure the output is wav; on Linux install ALSA utils; on macOS use `afplay` |
 | Plugin listed as failing, nothing activates | the config schema was written in a way the host rejects (e.g. a `volatile` object wrapped around `volatile` fields) — `dsh web` prints the `ValidationError` naming the field; read that line |
@@ -173,11 +174,11 @@ dsh web
 
 | Area | Status |
 |---|---|
-| Harness | 0.1.7-rc.2 (peerDependencies declared as `^0.1.7-rc.2`, with devDependencies and CI pinned to the same release; since 0.1.2 the client node engine lives in `dsh-client-ui-conversation`/`dsh-client-ui-chat`, no longer `dsh-client-runtime`). The plugin lives on the host plane; background jobs must carry `owner: agent` because the Web composition disables host-plane `tool-jobs` — still enforced in 0.1.7-rc.2. |
+| Harness | Both **0.1.7-rc.2 and 0.2.0-rc.1** are supported: peerDependencies declares `^0.1.7-rc.2 \|\| ^0.2.0-rc.1`, with devDependencies and CI pinned to 0.2.0-rc.1 (cordis 4.0.4). Since 0.1.2 the client node engine lives in `dsh-client-ui-conversation`/`dsh-client-ui-chat`, no longer `dsh-client-runtime`. **From 0.2.0-rc.1 this declaration is a load decision**: the host runs `evaluatePluginCompatibility` (from `@deepseek-ai/dsh-app-boot`, semver with `includePrerelease`) over every `@deepseek-ai/dsh*` peer range, and if one does not admit the running version the whole bundle is skipped — one startup line, `dsh: skipping profile bundle "<id>"`, and the tools, routes and client nodes are simply gone. That is how 0.3.7 vanished on 0.2.0-rc.1. The plugin lives on the host plane; background jobs must carry `owner: agent` because the Web composition disables host-plane `tool-jobs` — still true on both baselines. |
 | Session events | The constraint was measured on 0.1.5-rc.6: the persistence read path rejects the whole log on an unknown event that is not marked `ignorable`, and `Session.append` gives plugin events no way to set that marker. 0.1.7-rc.2 ships a built-in event catalog and `ignorable` retention logic, but this plugin has **not verified on a real host** that history loads with the flag on, so `durableEvents` stays `false`; keep it off until that is checked. |
 | Playback | Windows: built-in `SoundPlayer` (verified). macOS: `afplay`. Linux: `aplay` (install ALSA utils). `edge-tts` synthesizes only — use a local wav backend for audible output. |
 | Recording | macOS only (native + ffmpeg). Windows/Linux `transcribe({record})` reports unavailability cleanly. |
 | Write endpoints | The five state-changing routes (`/voice/call/answer`, `/voice/provision/{prepare,adopt,cancel,cleanup}`) are refused with 403 on a cross-site `Sec-Fetch-Site`, and fall back to comparing `Origin` against `Host` when the header is absent. The host webserver carries no session, token or origin check of its own and `host` is configurable to `0.0.0.0`, so this is the only barrier on the browser surface. A local process (curl) sends neither header and stays reachable: a loopback port has no shared secret to check, and that residual is stated rather than papered over. |
 | Shell sandbox | Local engine commands run with an explicit `danger-full-access` policy — the engine binaries, GGUF models, and audio dir span roots no confined sandbox mode covers. **Evaluate this trust boundary before deploying.** |
 | Call card | v0.2 rides the webserver route seam (SSE `/voice/call/events` + `POST /voice/call/answer`; the body is the reserved `VoiceAnswerPayload` contract verbatim). Web composition only — headless falls back to the modal/refusal. Same-origin trust level as the audio route. |
-| Tests | 284 unit and route tests, all green on Linux / Windows / macOS (`pnpm test`, three-platform CI matrix); `pnpm typecheck` now covers `src/`, `src/client/` and `test/` — the test suite was outside the type check before. The plugin config schema is also validated through the host's own entry point. |
+| Tests | 289 unit and route tests, all green on Linux / Windows / macOS (`pnpm test`, three-platform CI matrix); `pnpm typecheck` now covers `src/`, `src/client/` and `test/` — the test suite was outside the type check before. The plugin config schema is validated through the host's own entry point, and the declared harness compatibility through the host's own predicate (`test/harness-compat.test.ts`), which also pins "the devDependencies release must be one of the claimed baselines" and "a major we have not run against must not be claimed". |

@@ -9,7 +9,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
-  <img src="https://img.shields.io/badge/tests-284%20green-1f883d" alt="284 个测试全绿" />
+  <img src="https://img.shields.io/badge/harness-0.2.0--rc.1-5b5bd6" alt="DSH 0.2.0-rc.1" />
+  <img src="https://img.shields.io/badge/tests-289%20green-1f883d" alt="289 个测试全绿" />
 </p>
 
 <p align="center">
@@ -34,7 +35,7 @@
 ## 🚀 安装
 
 ```bash
-npm install -g @deepseek-ai/dsh          # 需要 0.1.7-rc.2；Node ≥ 20
+npm install -g @deepseek-ai/dsh          # 需要 0.1.7-rc.2 或 0.2.0-rc.1；Node ≥ 20
 dsh plugin --profile web add dsh-voice-call
 dsh web
 ```
@@ -75,6 +76,16 @@ dsh web
 
 默认**关着**：设置卡里「等问题振铃（实验性新功能）」打开才生效。这一版其余改动——包括两处"插件能把宿主带走"的围栏——见 [docs/changelog.md](docs/changelog.md)。
 
+## 🔌 0.3.8：dsh 0.2.0-rc.1 上，它不再被静默跳过
+
+dsh 0.2.0-rc.1 把 `peerDependencies` 从一句警告变成了加载判定：范围里不含正在运行的版本，宿主就**整个跳过这个插件**——工具、路由、客户端节点一起没了，只在启动时留一行 `dsh: skipping profile bundle "dsh-voice-call": … is incompatible with dsh 0.2.0-rc.1`。0.3.7 正是这样在 0.2.0-rc.1 上消失的，而它的 284 个测试全绿：没有一条测试去读清单、也没有一条测试走一遍宿主的判定。
+
+这一版把基线抬到 **0.2.0-rc.1，同时保留 0.1.7-rc.2**（`^0.1.7-rc.2 || ^0.2.0-rc.1`）。**源码一行没改**——三份类型检查加 289 个用例在两套基线下各跑一遍全绿，`tools/execute` / `user-questions/request` / `webServer.register` 三条缝隙在新树上连行号都和旧树一致，客户端 bundle 在浏览器里仍然只要 `react`。顺手把清单补齐了：`dsh-client-ui-chat`、`dsh-client-ui-conversation`、`dsh-client-ui-settings`、`dsh-api-session-controller`、`dsh-host-webserver` 这五个 `src/` 真的在用、但以前没声明的包现在是 peer 了——代码摸得着、清单不写，宿主就看不见它，也就不会为它拦你。
+
+而这套声明现在由**宿主自己的判定函数**把关（`@deepseek-ai/dsh-app-boot` 的 `evaluatePluginCompatibility` 进了 `test/harness-compat.test.ts`）：清单说支持的每一个基线都要过；测试还钉住"devDependencies 锁的版本必须在声称的基线里"，以及"没跑过的 0.3.0 不许声称"。
+
+已经在 0.2.0-rc.1 上的，把插件更到 0.3.8 就回来了。`dsh plugin allow-version` 能给旧版发一张精确版本的豁免状，但那是拿没验证过的组合在跑。
+
 ## ⚙️ 配置
 
 写在 profile 的 `cordis.patch.yml` 里，**按 `id` 更新，绝不重复 insert**（同一 id 插两次会导致启动崩溃）。下面这些也都能在插件设置页里改：
@@ -107,8 +118,8 @@ dsh web
 
 ## 💻 兼容性
 
-- **平台** —— Windows 10/11、macOS、Linux 三平台都在 CI 上跑，284 个测试全绿。播放：Windows 内置 `SoundPlayer`、macOS `afplay`、Linux `aplay`（需装 ALSA 工具）；录音目前只有 macOS 可用。
-- **harness** —— 基线 `0.1.7-rc.2`，peerDependencies 声明、CI 锁在同一版。
+- **平台** —— Windows 10/11、macOS、Linux 三平台都在 CI 上跑，289 个测试全绿。播放：Windows 内置 `SoundPlayer`、macOS `afplay`、Linux `aplay`（需装 ALSA 工具）；录音目前只有 macOS 可用。
+- **harness** —— 同时支持 `0.1.7-rc.2` 与 `0.2.0-rc.1`：`peerDependencies` 写成 `^0.1.7-rc.2 || ^0.2.0-rc.1`，devDependencies 与 CI 锁在 0.2.0-rc.1。从 0.2.0-rc.1 起这份声明决定**加载还是跳过**（不只是警告），所以基线换版时它会跟着动，`test/harness-compat.test.ts` 用宿主自己的判定函数盯着它。
 - **`durableEvents` 请保持 `false`** —— 插件事件没有注册入口，写入 `voice/*` 事件会让那份会话历史再也加载不了。这条是实测到的，别的新版本上未验证过开启的后果。
 - **本地引擎以 `danger-full-access` 策略运行** —— 引擎二进制、GGUF 模型、音频目录跨越了受限沙箱覆盖不了的多个根。**部署前请评估这条信任边界。**
 
@@ -137,13 +148,13 @@ dsh web
 ```bash
 pnpm install
 pnpm typecheck   # src/ + src/client/ + test/ 三份都在类型检查范围内
-pnpm test        # node --test，284 个用例
+pnpm test        # node --test，289 个用例
 pnpm build       # tsc + 客户端 bundle
 ```
 
 ## 🗺 路线图
 
-已发布到 0.3.7：通话域 → 专属来电卡片 → 一键装配与 11 条铃声 → 三平台复核 → 等问题振铃。下一版：**错过来电的语音信箱 + AI 已读回执**（`src/domain/voicemail.ts`，事件类型已预留）。v1.0 冻结 schema，发布稳定版。
+已发布到 0.3.8：通话域 → 专属来电卡片 → 一键装配与 11 条铃声 → 三平台复核 → 等问题振铃 → 跟上 dsh 0.2.0-rc.1。下一版：**错过来电的语音信箱 + AI 已读回执**（`src/domain/voicemail.ts`，事件类型已预留）。v1.0 冻结 schema，发布稳定版。
 
 ## 🤖 署名 —— 这个项目是谁做的
 
