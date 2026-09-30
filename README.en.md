@@ -9,7 +9,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
-  <img src="https://img.shields.io/badge/harness-0.2.0--rc.1-5b5bd6" alt="DSH 0.2.0-rc.1" />
+  <img src="https://img.shields.io/badge/harness-0.2.0--rc.2-5b5bd6" alt="DSH 0.2.0-rc.1 and 0.2.0-rc.2, declared as ^0.2.0-rc.1" />
+  <img src="https://img.shields.io/badge/desktop-DeepSeek%20Harness-5b5bd6" alt="Checked item by item against the desktop app (dsh-desktop) runtime 0.2.0-rc.2" />
   <img src="https://img.shields.io/badge/tests-289%20green-1f883d" alt="289 tests green" />
 </p>
 
@@ -34,13 +35,15 @@ Three rules the whole project is built on:
 - **The human owns the answer key.** A call rings as a dedicated call card or a modal (接听 / 拒接 / 稍后再说); **nothing is ever played without consent**.
 - **Rejection teaches.** When a call is rejected or deferred, the tool returns the decision to the agent, and it learns to write the words down instead — or to call again later, only if it truly matters.
 
-## 🚀 Install
+## 🚀 Install (desktop app)
 
-```bash
-npm install -g @deepseek-ai/dsh          # needs 0.1.7-rc.2 or 0.2.0-rc.1; Node ≥ 20
-dsh plugin --profile web add dsh-voice-call
-dsh web
-```
+1. Open the **DeepSeek Harness desktop app** → the Plugins page (under Settings).
+2. Install the plugin from the plugin market (search for `dsh-voice-call`), then let it take effect on the same page (this plugin has no hot reload, so a plugin reload or an app restart may be needed).
+3. Configure it on the plugin's own settings page on first use.
+
+> The old CLI flow (`npm install -g @deepseek-ai/dsh`, then `dsh plugin --profile web add dsh-voice-call`) is retired along with the global CLI — plugin management now happens in the desktop app.
+
+> Version requirement: DSH 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 — and 0.2.0-rc.2 is exactly the runtime the desktop app ships with today.
 
 Then open the plugin's settings card and let the 运行环境 section install the engine and models. Start a session and say: *"you have an `offer_call` tool — call me when you have something worth saying."*
 
@@ -48,7 +51,7 @@ The full path from an empty machine to hearing a voice (manual downloads, every 
 
 ### 🤖 If an agent is doing the installing
 
-1. **After installing the plugin, have the human restart `dsh web` by hand.** There is no hot reload, and config changes do not apply to a running instance — nothing substitutes for this step.
+1. **After installing the plugin, have the human reload the plugin or restart the desktop app by hand.** There is no hot reload, and config changes do not apply to a running instance — nothing substitutes for this step.
 2. Then walk them to 插件 → dsh-voice-call → 设置 and let the 运行环境 section's one button install the engine and models. Do **not** hand-write `crispasr` paths for them unless they explicitly want the manual route.
 3. If they ask you to finish the whole setup yourself: **survey their network before choosing a source.** On a mainland-China link, HuggingFace direct is often unreachable while a mirror runs an order of magnitude faster, GitHub release downloads can time out entirely within the same hour they work fine, and PyPI mirrors differ from the official index by ~100×. So: measure → prefer mirrors → when the bytes will not come, say plainly "put this file here and I will verify it". Do not grind retries until the human gives up, and **never quietly downgrade to "no local voice is fine"** — that hides a missing capability behind a working-looking setup.
 4. **Leave existing hand-written paths alone** (`D:\crispasr`, `D:\tts` and friends). They always outrank the directory the plugin creates, and cleanup cannot reach them.
@@ -78,15 +81,20 @@ The full path from an empty machine to hearing a voice (manual downloads, every 
 
 It ships **off**: turn on 「等问题振铃（实验性新功能）」 in the settings card. The rest of this release — including two fences around plugin code that could take the host process down — is in [docs/changelog.en.md](docs/changelog.en.md).
 
-## 🔌 0.3.8: it no longer vanishes on dsh 0.2.0-rc.1
+## 🖥 Running on the new baselines: 0.2.0-rc.1 / rc.2, and the desktop app
 
-dsh 0.2.0-rc.1 turned `peerDependencies` from a warning into a load decision: if the declared range does not admit the running version, the host **skips the whole plugin** — its tools, its routes, its client nodes — leaving one startup line, `dsh: skipping profile bundle "dsh-voice-call": … is incompatible with dsh 0.2.0-rc.1`. That is exactly how 0.3.7 disappeared on the new harness, with all 284 of its tests green: no test read the manifest, and none had ever walked the host's predicate.
+dsh 0.2.0-rc.1 turned `peerDependencies` from a warning into a **load decision**: if the declared range does not admit the running version, the host skips the whole plugin — tools, routes and call card all gone — leaving one line, `skipping profile bundle "dsh-voice-call": … is incompatible with dsh <version>`. That is how 0.3.7 vanished, with 284 tests green: nothing had ever read the manifest. Since 0.3.8 the range is `^0.1.7-rc.2 || ^0.2.0-rc.1` (which covers rc.1 and rc.2), and the **host's own predicate** is now in the suite — `test/harness-compat.test.ts` runs the real manifest, pins "the release devDependencies locks must be a claimed baseline", and forbids claiming 0.3.0, which nobody has run against.
 
-This release raises the baseline to **0.2.0-rc.1 while keeping 0.1.7-rc.2** (`^0.1.7-rc.2 || ^0.2.0-rc.1`). **No source line changed** — three type checks and all 289 tests run green twice, once per dependency tree, and the three seams the plugin rides on (`tools/execute`, `user-questions/request`, `webServer.register`) sit on the same line numbers as before, while the client bundle still needs nothing from the host in the browser but `react`. The manifest also tells the truth now: `dsh-client-ui-chat`, `dsh-client-ui-conversation`, `dsh-client-ui-settings`, `dsh-api-session-controller` and `dsh-host-webserver` are declared as peers, because `src/` uses them — a seam the code touches but the manifest omits is invisible to the gate, so the host cannot warn you when it moves.
+**The desktop app (`@deepseek-ai/dsh-desktop`, Electron 44) was checked item by item against the runtime it actually installs**, which is 0.2.0-rc.2:
 
-And the declaration is now guarded by the host's own function: `evaluatePluginCompatibility` from `@deepseek-ai/dsh-app-boot` runs over the real manifest in `test/harness-compat.test.ts`, for every baseline we claim. The same file pins two more promises — the version `devDependencies` locks must be one of the claimed baselines, and a major we have not run against (0.3.0) must not be claimed.
+- It shares the same `~/.dsh` home, with its own `desktop` profile — its own `package.json`, `cordis.patch.yml` and `node_modules` beside the CLI's `web` one. All **20 peers we declare are among the 287 shared packages** it ships, at matching versions.
+- Its UI runs on a custom scheme, `dsh-app://app`; requests the page makes to `/voice/...` and `/plugins/...` are forwarded by the main process to `http://127.0.0.1:<random port>`. Our client only ever uses **relative URLs**, so the call card, the settings card and both SSE channels land on that forwarding path.
+- That forwarding **strips `Origin`, `Sec-Fetch-Site`, `Host` and `Cookie`** and substitutes the desktop's own host cookie, and 403s any origin that is not `dsh-app://app` before the request reaches the host. So on desktop our same-origin gate sees no origin headers at all and takes the "local process" branch — the cross-site wall is the main process's, and it is firmer (private port, private cookie). The defence moved; it did not disappear, and the deployment doc says so instead of pretending our gate is still the first line.
+- The sandbox vocabulary is unchanged (`danger-full-access` still there), so the local engine path is unaffected.
+- **Measured**: hitting the host port of the desktop app while it runs returned 200 on all three read endpoints — `/voice/call/state`, `/voice/provision/state`, `/voice/provision/disk` — with values taken from the `desktop` profile (`tone: marimba`, `phase: ready`). The server half genuinely activates on that runtime. `GET /` on the same port is 401: the host's own paths require its cookie, while routes a plugin registers sit outside that door, and the deployment doc says so plainly.
+- What genuinely changed is version coupling: the desktop feed (`download.deepseek.com/dsh-desk/feeds/…`, channel `nightly`) moves independently of npm's `latest`, so the app can carry a runtime outside anything we claim. Then the host skips the plugin silently, and the symptom is "dsh-voice-call has no settings row any more".
 
-Already on 0.2.0-rc.1? Updating to 0.3.8 brings the plugin back. `dsh plugin allow-version` will write a pass for an exact plugin version on an exact runtime, which is a way to run untested combinations, not a way to make them tested.
+The parts that need a real click — the settings card rendering in Electron, the ringtone actually sounding, an accepted call playing the whole sentence, the provisioning bar streaming — are listed as unverified in the deployment doc. Nothing hot-reloads here either: reload the plugin or restart the app after an update.
 
 ## ⚙️ Configuration
 
@@ -121,7 +129,7 @@ Every field, explained: **[docs/deployment.en.md](docs/deployment.en.md)**.
 ## 💻 Compatibility
 
 - **Platforms** — Windows 10/11, macOS and Linux all run in CI, 289 tests green. Playback: built-in `SoundPlayer` on Windows, `afplay` on macOS, `aplay` on Linux (needs ALSA tools); recording is currently macOS only.
-- **Harness** — both `0.1.7-rc.2` and `0.2.0-rc.1` are supported: `peerDependencies` declares `^0.1.7-rc.2 || ^0.2.0-rc.1`, with devDependencies and CI pinned to 0.2.0-rc.1. From 0.2.0-rc.1 that declaration decides **load or skip** — not warn — so `test/harness-compat.test.ts` checks it against the host's own predicate whenever a baseline moves.
+- **Harness** — `0.1.7-rc.2`, `0.2.0-rc.1` and `0.2.0-rc.2` are supported: `peerDependencies` declares `^0.1.7-rc.2 || ^0.2.0-rc.1` (the second arm covers the whole 0.2.0-rc.x run), with devDependencies and CI pinned to 0.2.0-rc.2. From 0.2.0-rc.1 that declaration decides **load or skip** — not warn — so `test/harness-compat.test.ts` checks it against the host's own predicate whenever a baseline moves. The **desktop app** (`@deepseek-ai/dsh-desktop`) bundles 0.2.0-rc.2 as its runtime and was audited item by item: shared packages, the `dsh-app://app` request path, streaming, and the sandbox vocabulary — see [docs/deployment.en.md](docs/deployment.en.md#-desktop-compatibility-in-full).
 - **Keep `durableEvents` at `false`** — there is no registration seam for plugin events, and appending `voice/*` events makes that session history unloadable. Measured on 0.1.5-rc.6; turning it on has not been verified on newer builds.
 - **The local engine runs under `danger-full-access`** — engine binary, GGUF models and the audio directory span more roots than a confined sandbox can cover. **Assess this trust boundary before deploying.**
 
@@ -156,7 +164,7 @@ pnpm build       # tsc + the client bundle
 
 ## 🗺 Roadmap
 
-Shipped through 0.3.8: the call domain → the dedicated call card → one-click provisioning and eleven ringtones → the three-platform audit → the waiting-question ring → keeping up with dsh 0.2.0-rc.1. Next: **voicemail for missed calls + AI read receipts** (`src/domain/voicemail.ts`, event types already reserved). v1.0 freezes the schema.
+Shipped through 0.3.9: the call domain → the dedicated call card → one-click provisioning and eleven ringtones → the three-platform audit → the waiting-question ring → keeping up with dsh 0.2.0-rc.1/rc.2 and the desktop app. Next: **voicemail for missed calls + AI read receipts** (`src/domain/voicemail.ts`, event types already reserved). v1.0 freezes the schema.
 
 ## 🤖 Credits — who made this
 

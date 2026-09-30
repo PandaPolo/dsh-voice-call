@@ -42,6 +42,17 @@ verified locally except the push and the publish themselves.
   peer range has been widened in the same commit and `SUPPORTED` lists both the
   old and the new release. Packages `src/` imports must appear there too: a seam
   the code touches but the manifest omits is invisible to the gate.
+- **Desktop app**: `@deepseek-ai/dsh-desktop` bundles its own dsh runtime, and
+  its version moves independently of npm (`nightly` feed on
+  `download.deepseek.com`). On a baseline bump, read the installed
+  `app.asar → dsh/desktop-runtime.json` (`release.version`, `sharedPackages`) and
+  check that every declared peer exists there at a version the gate admits —
+  that is how 0.2.0-rc.2 and the desktop build got claimed. The full table lives
+  in `docs/deployment.md` / `.en.md` under the desktop section.
+- **This machine has no global CLI any more** (the desktop app took over plugin
+  management). Install/verify work goes through the desktop app's plugin page —
+  it runs installs with its bundled pnpm against `~/.dsh/profiles/desktop`.
+  `dsh … --dump-config` only exists if a CLI is installed temporarily.
 
 ## 1. Push the GitHub repo
 
@@ -64,10 +75,15 @@ Repo settings (already applied — re-check after any rename):
 
 ## 2. Live DSH verification (follow-ups)
 
-With a real provider configured (your DSH web profile):
+With a real provider configured, in the **desktop app** (there is no global CLI
+on this machine any more; the app installs plugins through its own bundled pnpm
+into `~/.dsh/profiles/desktop`):
 
 ```sh
-dsh plugin --profile web add D:\path\to\dsh-voice-call   # from the repo checkout
+# desktop app → Plugins page → install dsh-voice-call@<version>, then reload the
+# plugin or restart the app — it has no hot reload.
+# A local build can be checked by packing (`pnpm pack`) and installing the
+# tarball path from the plugin page, the same way a CLI profile would.
 ```
 
 Then in a session:

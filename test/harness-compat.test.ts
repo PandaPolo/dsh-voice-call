@@ -26,8 +26,13 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot';
 
-/** Harness releases this plugin claims to run on. Add a line here when claiming one. */
-const SUPPORTED = ['0.1.7-rc.2', '0.2.0-rc.1'];
+/**
+ * Harness releases this plugin claims to run on. Add a line here when claiming
+ * one. `0.2.0-rc.2` is also the version the desktop app (`@deepseek-ai/dsh-desktop`)
+ * ships as its bundled runtime, so this list is what the packaged desktop build
+ * checks the manifest against.
+ */
+const SUPPORTED = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2'];
 
 type Manifest = {
   name: string;

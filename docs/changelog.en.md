@@ -6,6 +6,29 @@
 >
 > 中文版：[changelog.md](changelog.md)
 
+## What changed in 0.3.9 — baseline 0.2.0-rc.2, and an audit of the desktop app
+
+npm's `latest` and `next` for dsh both point at **0.2.0-rc.2** now, and DeepSeek Harness has shipped a **desktop app** (`@deepseek-ai/dsh-desktop`: Electron 44, its own node 24.18.1 and pnpm 11.7.0). This release does two things: follows the baseline to rc.2, and checks every seam the plugin depends on against the runtime that the desktop app actually installs.
+
+| Area | Change |
+|---|---|
+| devDependencies / CI | Pinned to 0.2.0-rc.2 (cordis 4.0.4 and schemastery 3.18.4 unchanged) |
+| peerDependencies | **Not one character changed**: `^0.1.7-rc.2 \|\| ^0.2.0-rc.1` already admits 0.2.0-rc.2, under the host's `includePrerelease` semantics and under npm/pnpm's default ones. Both are now proven by the third baseline added to `test/harness-compat.test.ts` |
+| Claimed baselines | `SUPPORTED` is 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2. The desktop app runs 0.2.0-rc.2 as its bundled runtime, so this list is also what the packaged build judges the manifest against |
+| Source | Untouched. The client bundle is byte-identical in size to the previous release (70143) |
+
+**What the desktop audit found** — all of it read out of the `app.asar` and the `desktop-runtime.json` installed on this machine, not inferred:
+
+- The desktop app **shares the same DSH home** (`~/.dsh`) with its own `desktop` profile: its own `cordis.patch.yml`, its own `node_modules`. Plugins install into it from npm exactly as into a CLI profile.
+- It ships a per-version runtime inventory: 287 shared packages, and **all 20 peers we declare are in it**, at 0.2.0-rc.2 (cordis 4.0.4, schemastery 3.18.4).
+- Its UI runs on a custom scheme, **`dsh-app://app`**. Requests the page makes to `/voice/...` and `/plugins/...` are forwarded by the main process to the local `http://127.0.0.1:<random port>` through `forwardWebRequest`, whose purpose is authentication: it **strips `origin`, `sec-fetch-site`, `host` and `cookie`**, replaces them with the desktop's own host cookie, and 403s anything whose origin is not `dsh-app://app` before it ever reaches the host.
+- For our **same-origin write gate** that moves where the defence lives, it does not disable it: on the desktop our routes see neither `Sec-Fetch-Site` nor `Origin`, so they take the "not a browser process" branch and pass. The cross-site wall is the main-process check above, and it is firmer than the browser one (the port is private and cookieed). Documented now, so nobody assumes our gate is the first line there.
+- Our own client only ever uses **relative URLs** (`fetch('/voice/…')`, `new EventSource('/voice/call/events')`), so under `dsh-app://app` they resolve into that forwarding path — there is no hardcoded `127.0.0.1` anywhere. The scheme is registered with `stream` and `supportFetchAPI`, and the forwarder states that it preserves streaming and cancellation, so both SSE channels (call events, provisioning progress) are on the supported path.
+- Sandbox vocabulary is unchanged: `read-only / workspace-write / danger-full-access`, so the local engine path is unaffected.
+- **The real desktop-specific risk is a coupling change**: npm's `latest` and the desktop feed (`download.deepseek.com/dsh-desk/feeds/…`, channel `nightly`) move independently, so the desktop app can carry a runtime newer than npm `latest` — possibly outside anything we have claimed. Then the host silently **skips the plugin**, which looks like "dsh-voice-call has no settings row any more". The answer is not a wider range; it is claiming only what has been run, and re-running on every baseline move.
+
+Verified: three `tsc` passes and 289 tests green on 0.2.0-rc.2; the 0.1.7-rc.2 tree was measured against this same source (at 0.3.8 — the source has not moved since). The desktop half of the acceptance is one click on your machine — see the desktop section of the README.
+
 ## What changed in 0.3.8 — dsh 0.2.0-rc.1 stopped warning and started skipping
 
 **The host turned the peer range into a load decision.** 0.2.0-rc.1 ships `evaluatePluginCompatibility` in `@deepseek-ai/dsh-app-boot`: it walks the plugin manifest's `peerDependencies`, looks only at `@deepseek-ai/dsh` and `@deepseek-ai/dsh-*`, and tests the running version against each range with semver (`includePrerelease: true`). One range that does not admit it and the host **does not load the bundle at all** — tools, routes and client nodes all gone, leaving a single startup line:

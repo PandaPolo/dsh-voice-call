@@ -10,29 +10,28 @@
 | 平台 | Windows 10/11 · macOS · Linux |
 | Node.js | **≥ 20**（插件运行要求）；运行测试需要 22.18+（Node 原生 TS 类型剥离） |
 | pnpm | 9+（CI 使用 pnpm 11） |
-| dsh CLI | `@deepseek-ai/dsh`，0.1.7-rc.2 或 0.2.0-rc.1 |
+| DSH（桌面版） | 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2（桌面版当前带的就是 0.2.0-rc.2） |
 | 本地语音引擎 | CrispASR ≥ 0.8.28 + Qwen3-TTS GGUF 模型（推荐，否则没有本地合成音色） |
 | 模型提供商 | dsh 需要已配置可用的 LLM API 凭据（agent 本身依赖） |
 
-## 2️⃣ 安装 dsh CLI
+## 2️⃣ 安装（桌面版）
 
-```bash
-npm install -g @deepseek-ai/dsh
-dsh --version    # 期望输出 0.2.0-rc.1（0.1.7-rc.2 同样受支持）
-```
+1. 打开 **DeepSeek Harness 桌面版** → 「插件」页面（设置里的插件管理）。
+2. 在插件市场搜索 `dsh-voice-call` 并安装；装好后在同一页让它生效（本插件不热加载）。
+3. 首次使用在插件自己的设置页里配置。
 
-- 确认模型提供商凭据已配置（dsh 跑 agent 需要 API key）。
-- profile 目录位于 `$DSH_HOME/profiles` 下；本插件的默认 profile 是 `web`。
+> 旧版的命令行安装（`npm install -g @deepseek-ai/dsh`，然后 `dsh plugin --profile web add <包名>`）随全局 CLI 一起退役了——本机已卸载全局 DSH，插件管理请走桌面版界面。
+
+- 确认模型提供商凭据已配置（桌面版跑 agent 需要 API key）。
+- 插件数据位于 `$DSH_HOME` 下（本机为 `C:\Users\Juser\.dsh`）。
 
 ## 3️⃣ 安装插件
 
-```bash
-dsh plugin --profile web add dsh-voice-call
-```
+在桌面版的**插件页面**里安装：
 
-- 以上命令从 npm 安装已发布的 `dsh-voice-call`（版本徽章即当前 npm latest）。
-- 本地开发、从源码安装：`dsh plugin --profile web add D:\path\to\dsh-voice-call`（指向仓库路径）。
-- 安装后可执行 `dsh --profile web --dump-config` 查看合成后的完整配置树，确认插件已进入。
+- 从插件市场搜索并安装已发布的 `dsh-voice-call`（版本徽章即当前 npm latest）。
+- 本地开发、从源码安装：在插件页面里用本地路径 / GitHub spec 安装（指向仓库路径）。
+- 装好后在插件页面里重载该插件，或重启桌面版，让它生效。
 
 > **第 4、5 步可以跳过。** 装好插件、`callMode` 之类的基本项写进配置之后，剩下的引擎与模型不必手动下载：打开 DSH 的插件设置页，「运行环境」区里那一个按钮会探测这台机器并把缺的东西装齐（断点续传、多路并行、多源测速择优、镜像优先）。下面两步是**手动路径**——你想自己控制版本、或者一键装配所在的网络不通时用。
 
@@ -132,15 +131,13 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
 
 ## 7️⃣ 启动与验证
 
-```bash
-dsh web
-```
+打开 **DeepSeek Harness 桌面版**，插件的功能就在它的界面里生效（来电卡片浮在右下角）。
 
 1. 打开一个会话，输入 `/voice` —— 应显示 `stt: … · tts: crispasr · readReplies: off` 以及 `audioDir: …`；
 2. 让 agent 说一句："用 `speak` 工具说'你好'。" —— 听到声音即成功；
 3. 完整通话测试："你有 `offer_call` 工具——有什么值得说的就打电话给我。" 点 **接听**，声音从扬声器播出；
 4. 来电卡片测试：配置 `callMode: card` 后重拨一次——右下角浮出振铃卡片（脉冲动画 + 来电者身份），点 **接听** 后卡片转为"已接听"并开始播放；
-5. 排查配置时可执行 `dsh --profile web --dump-config` 查看合成后的完整配置树。
+5. 排查配置时看 `~/.dsh/profiles/desktop/`（桌面版）或 `~/.dsh/profiles/web/`（CLI）里的 `package.json` 与 `cordis.patch.yml`；要合成后的完整配置树，可临时装一个全局 CLI 跑 `dsh --profile desktop --dump-config`。
 
 ## 8️⃣ 平台差异
 
@@ -154,9 +151,9 @@ dsh web
 
 | 症状 | 可能原因与解决办法 |
 |---|---|
-| `dsh web` 启动崩溃 | `cordis.patch.yml` 里同一 id 被 insert 了两次——删掉重复行，改为按 id 更新 |
-| 插件似乎没加载 | `dsh --profile web --dump-config` 检查配置树是否包含 `dsh-voice-call`；确认插件装到了正确的 profile |
-| 升级 dsh 之后插件整个不见了（工具、设置卡、来电卡片一起没了） | 0.2.0-rc.1 起宿主按 `peerDependencies` 决定加载还是跳过，`dsh --profile web --dump-config` 的头一行就是 `dsh: skipping profile bundle "dsh-voice-call": … is incompatible with dsh <版本>`。把插件更到声明了该基线的版本（0.3.8 起声明 `^0.1.7-rc.2 \|\| ^0.2.0-rc.1`）。`dsh plugin allow-version` 能给"某个插件版本 + 某个运行时版本"发一张精确豁免状，但那是明知未验证仍要跑，出了事自己承担 |
+| 桌面版启动崩溃 | `cordis.patch.yml` 里同一 id 被 insert 了两次——删掉重复行，改为按 id 更新 |
+| 插件似乎没加载 | 先看桌面版「插件」页里 dsh-voice-call 有没有设置项——没有基本就是宿主跳过了它。再核对 `~/.dsh/profiles/desktop/package.json`：`dependencies` 里的版本对不对、`dsh.profile.bundles` 里有没有 `dsh-voice-call`。插件不热加载，改完要重载插件或重启桌面版 |
+| 升级 dsh / 桌面版之后插件整个不见了（工具、设置卡、来电卡片一起没了） | 0.2.0-rc.1 起宿主按 `peerDependencies` 决定加载还是跳过，判定不通过就整块 bundle 不加载。桌面版是 GUI，那行 `skipping profile bundle "dsh-voice-call": … is incompatible with dsh <版本>` 不会弹给你看——症状就是插件凭空消失。先更到声明了该基线的插件版本（0.3.9 覆盖 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2）；急用时插件管理页能给"某个插件版本 + 某个运行时版本"发一张精确豁免（对应 CLI 的 `dsh plugin allow-version`），但那是明知未验证仍要跑。想拿到那行原文，可以临时装一个全局 CLI：`dsh --profile desktop --dump-config` 的头几行就是宿主的判定输出 |
 | 插件显示"异常"、完全不激活 | 配置 schema 被写坏了（例如给一个已经 `volatile` 的对象再套 `volatile`）——宿主会在启动时打印 `ValidationError`，看那一行指出的是哪个字段 |
 | 合成失败（exit ≠ 0） | 检查 `bin` / `model` / `codec` 三个路径是否为存在的绝对路径；codec 模型不能缺；CrispASR 需 ≥ 0.8.28 |
 | 来电振铃后没有声音 | 先看卡片有没有写明「浏览器拦住了铃声」——那是浏览器的自动播放策略，点一下页面就会响；否则是播放问题：Windows 确认输出为 wav，Linux 安装 ALSA 工具，macOS 用 `afplay` |
@@ -171,11 +168,30 @@ dsh web
 
 | 方面 | 状态 |
 |---|---|
-| harness | 同时支持 **0.1.7-rc.2 与 0.2.0-rc.1**：peerDependencies 声明 `^0.1.7-rc.2 \|\| ^0.2.0-rc.1`，devDependencies 与 CI 锁在 0.2.0-rc.1（cordis 4.0.4）。0.1.2 起客户端节点引擎并入 `dsh-client-ui-conversation`/`dsh-client-ui-chat`，不再依赖 `dsh-client-runtime`。**从 0.2.0-rc.1 起这份声明是加载判定**：宿主用 `evaluatePluginCompatibility`（`@deepseek-ai/dsh-app-boot`，semver `includePrerelease`）逐个检查 `@deepseek-ai/dsh*` 的 peer 范围，只要有一个不含正在运行的版本，整个 bundle 被跳过——启动时打一行 `dsh: skipping profile bundle "<id>"`，工具、路由、客户端节点全都不在。0.3.7 就是这样在 0.2.0-rc.1 上消失的。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 Web 组合禁用了 host 平面的 `tool-jobs`（两个基线上都成立）。 |
+| harness | 同时支持 **0.1.7-rc.2、0.2.0-rc.1、0.2.0-rc.2**：peerDependencies 声明 `^0.1.7-rc.2 \|\| ^0.2.0-rc.1`（后一条覆盖整段 0.2.0-rc.x），devDependencies 与 CI 锁在 0.2.0-rc.2（cordis 4.0.4）。0.1.2 起客户端节点引擎并入 `dsh-client-ui-conversation`/`dsh-client-ui-chat`，不再依赖 `dsh-client-runtime`。**从 0.2.0-rc.1 起这份声明是加载判定**：宿主用 `evaluatePluginCompatibility`（`@deepseek-ai/dsh-app-boot`，semver `includePrerelease`）逐个检查 `@deepseek-ai/dsh*` 的 peer 范围，只要有一个不含正在运行的版本，整个 bundle 被跳过——启动时打一行 `dsh: skipping profile bundle "<id>"`，工具、路由、客户端节点全都不在。0.3.7 就是这样在 0.2.0-rc.1 上消失的。插件在 host 平面；后台任务必须携带 `owner: agent`，因为 Web 组合禁用了 host 平面的 `tool-jobs`（各基线上都成立）。桌面版逐条核对见下面「桌面版兼容性（全文）」。 |
 | 会话事件 | 这条限制是在 0.1.5-rc.6 上实测到的：持久化读路径遇到「未知且未标 `ignorable`」的事件会拒绝整份日志，而 `Session.append` 不给插件事件写入 `ignorable` 的入口。0.1.7-rc.2 一侧读到了内置事件清单与 `ignorable` 保留逻辑，但本插件**没有真机验证过开启后的历史可加载性**，所以 `durableEvents` 继续默认 `false`；验证通过前请勿开启。 |
 | 播放 | Windows：内置 `SoundPlayer`（已实测）。macOS：`afplay`。Linux：`aplay`（需安装 ALSA 工具）。`edge-tts` 只合成不播放——要听到声音请用本地 wav 后端。 |
 | 录音 | 仅 macOS（原生 + ffmpeg）。Windows/Linux 的 `transcribe({record})` 会明确提示不可用。 |
 | Shell 沙箱 | 本地引擎命令以显式 `danger-full-access` 策略运行——引擎二进制、GGUF 模型、音频目录跨越了受限沙箱模式无法覆盖的多个根。**部署前请评估此信任边界。** |
-| 写接口 | 五个改状态的端点（`/voice/call/answer`、`/voice/provision/{prepare,adopt,cancel,cleanup}`）先查 `Sec-Fetch-Site`，跨站的直接 403；没有这个头时退回比对 `Origin` 与 `Host`。宿主 webserver 本身不带任何鉴权（只有 gzip 中间件），`host` 还可以配成 `0.0.0.0`，所以这道门是浏览器攻击面上唯一的屏障。本机进程（curl 等）不带这些头，仍然可调用——回环端口没有共享密钥可查，这是明说的残余风险。 |
+| 写接口 | 五个改状态的端点（`/voice/call/answer`、`/voice/provision/{prepare,adopt,cancel,cleanup}`）先查 `Sec-Fetch-Site`，跨站的直接 403；没有这个头时退回比对 `Origin` 与 `Host`。宿主 webserver 本身不带任何鉴权（只有 gzip 中间件），`host` 还可以配成 `0.0.0.0`，所以在 CLI/浏览器部署里这道门是浏览器攻击面上唯一的屏障。本机进程（curl 等）不带这些头，仍然可调用——回环端口没有共享密钥可查，这是明说的残余风险。**桌面版下这条门不由我们把**：主进程转发时把 `Origin`/`Sec-Fetch-Site`/`Host`/`Cookie` 全删掉、换成它自己的 host cookie，非 `dsh-app://app` 的来源在主进程就被 403，于是我们的路由看到的是"没有任何来源头的本机请求"，走的是放行那一支。详见「桌面版兼容性（全文）」。 |
 | 来电卡片 | 走 webserver 路由缝隙（SSE `/voice/call/events` + `POST /voice/call/answer`，载荷即预留的 `VoiceAnswerPayload` 契约）；仅 web 组合可用，headless 自动回落弹窗/拒接。同源信任级别与音频路由一致。应答处理里插件抛出的异常被围栏在路由内（回 5xx 带原因），不会变成进程级未捕获异常——0.3.7 补的。 |
 | 测试 | 289 个单元/路由测试在 Linux / Windows / macOS 上全绿（`pnpm test`，CI 三平台矩阵）；`pnpm typecheck` 同时检查 `src/`、`src/client/` 和 `test/`——测试代码此前从不在类型检查范围内。插件自己的配置 schema 走一遍宿主的校验入口，插件声明的 harness 兼容性走一遍宿主的判定函数（`test/harness-compat.test.ts`），后者同时钉住"devDependencies 锁的版本必须在声称的基线里"和"没跑过的大版本不许声称"。 |
+## 🔒 桌面版兼容性（全文）
+
+DeepSeek Harness 桌面版（`@deepseek-ai/dsh-desktop`）是把整套 harness 打包进 Electron 的独立发行物。下面每条都是从这台机器上装好的那份 `app.asar`、它带的 `dsh/desktop-runtime.json` 和 `resources/app.asar.unpacked/` 里读出来的，不是按 CLI 的行为推的。插件版本 0.3.9 对着它逐项核对。
+
+| 方面 | 实测到的事实 | 对本插件意味着 |
+|---|---|---|
+| 发行与版本 | Electron 44，自带 node 24.18.1、pnpm 11.7.0；`app.asar` 里是一整套 `dsh/` 运行时。更新源 `https://download.deepseek.com/dsh-desk/feeds/win-x64/`，channel `nightly`，与 npm 的 `latest` **各走各的** | 桌面版可能带比 npm 更新（甚至不在声称范围内）的运行时版本，届时宿主会静默跳过插件 |
+| 运行时版本 | `desktop-runtime.json` 的 `release.version` = **0.2.0-rc.2**，`hostProtocolVersion` 4 | 宿主的加载判定拿这个版本去套我们的 peer 范围；`^0.2.0-rc.1` 含它，由 `test/harness-compat.test.ts` 钉住 |
+| 共享包 | `sharedPackages` 287 个，其中 `@deepseek-ai/dsh-*` 279 个，一律 0.2.0-rc.2（cordis 4.0.4、schemastery 3.18.4、cosmokit 1.8.5） | 我们声明的 **20 条 peer 全在里面**，逐条对过；运行时不需要 `@deepseek-ai/cordis`（只在类型层用），`@deepseek-ai/schemastery` 由 profile 里那份同版本满足 |
+| DSH home | 与 CLI 共用 `~/.dsh`；profile 目录 `~/.dsh/profiles/desktop`，与 `web` 各一份 `package.json` / `cordis.patch.yml` / `node_modules` | 音频目录 `~/.dsh/voice`、装配目录、缓存都在同一个 home 下，两个 profile 各跑各的互不覆盖。别把桌面版的配置写进 `web` 那份，反之也一样 |
+| 装插件 | 插件管理走桌面版 UI；它用自己打包的 pnpm 跑安装：`"DeepSeek Harness.exe" --expose-internals resources/runtime/pnpm/bin/pnpm.mjs add <pkg>@<ver>`。profile 的 workspace 配置是 `nodeLinker: hoisted` + `autoInstallPeers: false` | 与 CLI 一致的结论：**`@deepseek-ai/*` 必须是 peer，不能是 dependencies**，否则会在 profile 里装出第二份 harness 打断工具派发。`minimumReleaseAgeExclude` 里要有 `dsh-voice-call`，不然新发布的版本装不进去 |
+| 界面与请求路径 | 渲染端跑在自定义 scheme **`dsh-app://app`**（注册为 `standard/secure/supportFetchAPI/corsEnabled/stream`）。主进程 `protocol.handle` 把 `dsh-app://app/*` 分三类：静态首页、`/plugins/**`（附带 `cache-control: no-store`）、其余转发到本机 `http://127.0.0.1:<随机端口>` | 主进程**为 `/plugins/` 单独写了规则**，插件客户端 bundle 在这条链上是被支持的路径（这是从 `app.asar` 代码里读出来的，不是打了一次 200 证明的——不带 host cookie 直接访问宿主端口的 `/plugins/...` 返回 404）。我们自己的组件只用相对路径（`fetch('/voice/…')`、`new EventSource('/voice/call/events')`），所以天然落进这条转发链，没有硬编码主机名要改 |
+| 实测：桌面版里服务端那一半是活的 | 直接 GET 本机正在跑的桌面版宿主端口，三个只读端点全部 200：`/voice/call/state` 回了带 `"tone":"marimba"` 的外观状态，`/voice/provision/state` 回了 `phase: ready`、`variantId: win-vulkan`，`/voice/provision/disk` 回了目录计量——内容全部来自 `desktop` 那份 profile 的配置。同一个端口 `GET /` 返回 **401** `dsh web authentication required` | 插件在 0.2.0-rc.2 的桌面运行时里确实激活了：路由、配置、装配状态都在。顺带把一件该说清楚的事也测出来了：**宿主自己的路径要 cookie，插件注册的路由不在那道门后面**——本机任何进程都读得到这几个只读端点（内容是卡片与装配状态，不含凭据；端口是回环加随机）。写接口那一支在桌面版走的是"放行"，真正的拦截来自主进程那两道（origin 检查 + host cookie） |
+| 鉴权与同源门 | 转发函数删掉 `origin`、`sec-fetch-site`、`host`、`cookie`，换上桌面版自己的 host cookie；`origin` 若存在且不是 `dsh-app://app` 直接 403。WebSocket 那条 hook 更硬：`origin !== "dsh-app://app"` 就 cancel | 我们的 `Sec-Fetch-Site`/`Origin` 门在桌面版拿不到这两个头，于是走"本机进程"那一支放行——**浏览器攻击面由主进程那道门先挡住**，且比网页部署更严（端口私有 + 带 cookie）。这不等于我们的门失效：CLI/浏览器部署里它仍然是唯一屏障 |
+| 流式 | scheme 带 `stream: true`，转发函数注释明写"preserving streaming and cancellation"，且 `redirect: manual`、body/signal 原样透传 | 两条 SSE（`/voice/call/events` 来电事件、`/voice/provision/events` 装配进度）按设计可用；验收表现是卡片实时跳动、进度条不走空 |
+| 沙箱 | `dsh-sandbox-policy` 的词表仍是 `read-only / workspace-write / danger-full-access`，`danger-full-access` 语义不变（沙箱不限制文件改动） | 本地 CrispASR 引擎那条 `danger-full-access` 调用照旧成立，信任边界与 CLI 部署一样要自己评估 |
+| 播放与录音 | 桌面版主进程没有设置 `--autoplay-policy` 覆盖；另有 `installMicrophonePermissions(...)` 给渲染端开麦 | 浏览器自动播放规则在 Electron 里同样适用——铃声被拦时卡片会写明原因、点一下就重试（0.3.7 加的）。录音仍只在 macOS 提供，Windows 桌面版走 `transcribe({record})` 会明确报不可用 |
+
+**这一节里还没被真界面验收的部分**：设置卡在 Electron 里渲染、铃声实际响起、来电卡片接听后播完一整句、装配进度条流式更新。这些必须在桌面版里点一次才算数（插件不热加载，更完版本先重载插件或重启桌面版）。静态与依赖层面的结论已经落定；剩下的是观感与音频输出的现场确认。

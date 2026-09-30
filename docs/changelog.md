@@ -3,6 +3,29 @@
 > 从 [README](../README.md) 搬出来的发版账本。首页只留"最新版一句话"，这里按版本倒序保留全文。
 > 每个版本的发布说明在 [GitHub Releases](https://github.com/PandaPolo/dsh-voice-call/releases) 也有一份。
 
+## 0.3.9 —— 基线 0.2.0-rc.2，并把桌面版查了一遍
+
+dsh 的 `latest` 和 `next` 现在都指到 **0.2.0-rc.2**，同时 DeepSeek Harness 出了**桌面版**（`@deepseek-ai/dsh-desktop`，Electron 44，自带 node 24.18.1 与 pnpm 11.7.0）。这一版做两件事：把基线跟到 rc.2，以及把插件依赖的每条缝隙在桌面版实际装出来的那份运行时里逐条对过。
+
+| 项目 | 改动 |
+|---|---|
+| devDependencies / CI | 锁到 0.2.0-rc.2（cordis 4.0.4、schemastery 3.18.4 未变） |
+| peerDependencies | **一个字没改**：`^0.1.7-rc.2 \|\| ^0.2.0-rc.1` 本来就覆盖 0.2.0-rc.2，宿主的判定用 `includePrerelease` 跑，npm/pnpm 的默认语义也跑得过——这两条现在都由 `test/harness-compat.test.ts` 里新增的第三个基线验证 |
+| 声称的基线 | `SUPPORTED` 现在是 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2。桌面版跑的就是 0.2.0-rc.2 这个运行时版本，所以这条清单同时也是桌面版的判定依据 |
+| 源码 | 一行没动。客户端 bundle 字节数和上一版一致（70143） |
+
+**桌面版查下来的事实**（都来自这台机器上装好的 `app.asar` 与它带的 `desktop-runtime.json`，不是猜的）：
+
+- 桌面版**共用同一个 DSH home**（`~/.dsh`），profile 叫 `desktop`，和 `web` 各一份 `cordis.patch.yml`、各一份 `node_modules`。插件照常从 npm 装进这个 profile。
+- 它带一个 per-version 的运行时清单：287 个共享包，我们声明的 **20 条 peer 全在里面**，版本一律 0.2.0-rc.2（cordis 4.0.4 / schemastery 3.18.4）。
+- 界面跑在自定义 scheme **`dsh-app://app`** 上，页面对 `/voice/...`、`/plugins/...` 的请求由主进程 `forwardWebRequest` 转发到本机 `http://127.0.0.1:<随机端口>`。转发的目的是鉴权：它会把 `origin`、`sec-fetch-site`、`host`、`cookie` **统统删掉**，换上桌面版自己的 host cookie，非 `dsh-app://app` 的来源直接被主进程 403。
+- 对我们的**写接口同源门**这意味着防线的**位置**变了，不是失效：桌面版里我们的路由既看不到 `Sec-Fetch-Site` 也看不到 `Origin`，于是走的是「非浏览器进程」那一支放行；真正拦跨站请求的是上面那道主进程门，而且比网页版更硬（端口带私有 cookie）。这一条现在写在部署文档里，免得以后有人以为我们的门还在第一线上。
+- 我们自己的客户端只用**相对路径**（`fetch('/voice/…')`、`new EventSource('/voice/call/events')`），所以在 `dsh-app://app` 下天然解析到同一棵转发链，没有硬编码 `127.0.0.1` 的地方。scheme 注册时带了 `stream` 与 `supportFetchAPI`，转发函数也写明保留流与取消，所以两条 SSE（来电事件、装配进度）在这条链上是按设计工作的。
+- 沙箱词表没变：`read-only / workspace-write / danger-full-access` 三种，本地引擎那条照旧能跑。
+- **真正的桌面版特有风险**是版本耦合方式变了：npm 上 `latest` 和桌面版 feeds（`download.deepseek.com/dsh-desk/feeds/...`，channel 是 `nightly`）**各走各的**，桌面版可能带一个比 npm `latest` 更新、甚至不在我们声称范围内的运行时版本——那时宿主的判定会**静默跳过整个插件**，表现是"设置卡里突然没有 dsh-voice-call 这一项"。所以更该做的不是把范围写宽，而是别声称没跑过的版本，并让每次基线更版都真跑一遍。
+
+验证：三份 `tsc` + 289 个用例在 0.2.0-rc.2 上全绿；0.1.7-rc.2 那套依赖树用的是同一份源码（0.3.8 时测过，本版源码未动）。桌面版本身的验收是**在你机器上点一次**——见 README 的桌面版一节。
+
 ## 0.3.8 —— dsh 0.2.0-rc.1 不再把插件整个跳过
 
 **宿主把 peer 范围变成了加载判定。** 0.2.0-rc.1 的 `@deepseek-ai/dsh-app-boot` 里有一个 `evaluatePluginCompatibility`：它遍历插件清单的 `peerDependencies`，只看 `@deepseek-ai/dsh` 与 `@deepseek-ai/dsh-*` 这几条，拿正在运行的版本按 semver（`includePrerelease: true`）逐个套。只要有一条不含它，宿主就**不加载这个 bundle**——工具、路由、客户端节点一起消失，启动时只留一行：

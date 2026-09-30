@@ -9,7 +9,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
-  <img src="https://img.shields.io/badge/harness-0.2.0--rc.1-5b5bd6" alt="DSH 0.2.0-rc.1" />
+  <img src="https://img.shields.io/badge/harness-0.2.0--rc.2-5b5bd6" alt="DSH 0.2.0-rc.1 与 0.2.0-rc.2，声明范围 ^0.2.0-rc.1" />
+  <img src="https://img.shields.io/badge/desktop-DeepSeek%20Harness-5b5bd6" alt="桌面版（dsh-desktop）运行时 0.2.0-rc.2 已逐项核对" />
   <img src="https://img.shields.io/badge/tests-289%20green-1f883d" alt="289 个测试全绿" />
 </p>
 
@@ -32,13 +33,15 @@
 - **人类拥有接听权** —— 来电以弹窗或专属来电卡片呈现（接听 / 拒接 / 稍后再说），**未经同意绝不播放**。
 - **拒接也是教育** —— 被拒接或推迟时，工具把你的决定原样返回给 agent，它学会改用文字写下来，或者只在真正重要时再试一次。
 
-## 🚀 安装
+## 🚀 安装（桌面版）
 
-```bash
-npm install -g @deepseek-ai/dsh          # 需要 0.1.7-rc.2 或 0.2.0-rc.1；Node ≥ 20
-dsh plugin --profile web add dsh-voice-call
-dsh web
-```
+1. 打开 **DeepSeek Harness 桌面版** → 「插件」页面（设置里的插件管理）。
+2. 在插件市场搜索 `dsh-voice-call` 并安装；装好后在同一页让它生效（本插件不热加载，可能需要重载插件或重启桌面版）。
+3. 首次使用在插件自己的设置页里配置。
+
+> 旧版的命令行安装（`npm install -g @deepseek-ai/dsh`，然后 `dsh plugin --profile web add dsh-voice-call`）随全局 CLI 一起退役了——本机已卸载全局 DSH，插件管理请走桌面版界面。
+
+> 版本要求：需要 DSH 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2（桌面版当前带的就是 0.2.0-rc.2）。
 
 装完到 DSH 的**插件设置页**，「运行环境」区点一下就把引擎和模型装齐。然后开个会话，对 agent 说：*「你有 `offer_call` 工具——有什么值得说的就打电话给我。」*
 
@@ -46,7 +49,7 @@ dsh web
 
 ### 🤖 如果是 agent 在替人类装
 
-1. **装完插件，让用户手动重启 `dsh web`。** 插件不热加载，配置也不会在跑着的实例里生效——这一步没有替代。
+1. **装完插件，让用户重载该插件或重启桌面版。** 插件不热加载，配置也不会在跑着的实例里生效——这一步没有替代。
 2. 重启后带用户进「插件 → dsh-voice-call → 设置」，在「运行环境」区点那一个按钮，引擎与模型由它装齐。**不要**替用户手写 `crispasr` 的路径，除非他明确要走手动装配。
 3. 用户要是让你**把环境整个装完**：先摸清他所在的网络，再决定从哪儿取。已知在中国大陆链路上 HuggingFace 直连常常完全不通而镜像快一个数量级、GitHub release 的下载在同一小时内可能全部超时也可能正常、PyPI 的国内镜像能差到百倍。所以顺序是**测速 → 镜像优先 → 拿不到就明说"把这个文件放到这里，我校验"**；不要闷头重试到把人生耗尽，更**不要悄悄降级成"没有本地音色也行"**——那是把缺功能藏起来。
 4. **别碰用户已有的手写路径配置**（`D:\crispasr`、`D:\tts` 那一类）。它们的优先级永远高于插件自己创建的目录，清理也碰不到它们。
@@ -76,15 +79,20 @@ dsh web
 
 默认**关着**：设置卡里「等问题振铃（实验性新功能）」打开才生效。这一版其余改动——包括两处"插件能把宿主带走"的围栏——见 [docs/changelog.md](docs/changelog.md)。
 
-## 🔌 0.3.8：dsh 0.2.0-rc.1 上，它不再被静默跳过
+## 🖥 跑在新基线上：0.2.0-rc.1 / rc.2 与桌面版
 
-dsh 0.2.0-rc.1 把 `peerDependencies` 从一句警告变成了加载判定：范围里不含正在运行的版本，宿主就**整个跳过这个插件**——工具、路由、客户端节点一起没了，只在启动时留一行 `dsh: skipping profile bundle "dsh-voice-call": … is incompatible with dsh 0.2.0-rc.1`。0.3.7 正是这样在 0.2.0-rc.1 上消失的，而它的 284 个测试全绿：没有一条测试去读清单、也没有一条测试走一遍宿主的判定。
+dsh 0.2.0-rc.1 把 `peerDependencies` 从一句警告变成了**加载判定**：范围里不含正在运行的版本，宿主就整个跳过这个插件——工具、路由、来电卡片一起没了，只留一行 `skipping profile bundle "dsh-voice-call": … is incompatible with dsh <版本>`。0.3.7 正是这样消失的，而它 284 个测试全绿：没有一条测试读过清单。从 0.3.8 起范围写成 `^0.1.7-rc.2 || ^0.2.0-rc.1`（覆盖 rc.1 与 rc.2），并把**宿主自己的判定函数**请进测试（`test/harness-compat.test.ts` 跑真清单）：声称的每个基线都要过、devDependencies 锁的版本必须在声称范围内、没跑过的 0.3.0 不许声称。
 
-这一版把基线抬到 **0.2.0-rc.1，同时保留 0.1.7-rc.2**（`^0.1.7-rc.2 || ^0.2.0-rc.1`）。**源码一行没改**——三份类型检查加 289 个用例在两套基线下各跑一遍全绿，`tools/execute` / `user-questions/request` / `webServer.register` 三条缝隙在新树上连行号都和旧树一致，客户端 bundle 在浏览器里仍然只要 `react`。顺手把清单补齐了：`dsh-client-ui-chat`、`dsh-client-ui-conversation`、`dsh-client-ui-settings`、`dsh-api-session-controller`、`dsh-host-webserver` 这五个 `src/` 真的在用、但以前没声明的包现在是 peer 了——代码摸得着、清单不写，宿主就看不见它，也就不会为它拦你。
+**桌面版（`@deepseek-ai/dsh-desktop`，Electron 44）是逐条对着它装出来的那份运行时核对过的**，运行时版本 0.2.0-rc.2：
 
-而这套声明现在由**宿主自己的判定函数**把关（`@deepseek-ai/dsh-app-boot` 的 `evaluatePluginCompatibility` 进了 `test/harness-compat.test.ts`）：清单说支持的每一个基线都要过；测试还钉住"devDependencies 锁的版本必须在声称的基线里"，以及"没跑过的 0.3.0 不许声称"。
+- 共用同一个 `~/.dsh`，profile 叫 `desktop`，和 CLI 的 `web` 各一份配置；我们声明的 **20 条 peer 全在它带的 287 个共享包里**，版本一致。
+- 它的界面跑在自定义 scheme `dsh-app://app` 上，页面对 `/voice/...` 与 `/plugins/...` 的请求由主进程转发到本机 loopback 端口。我们自己的客户端**只用相对路径**，所以来电卡片、设置卡、两条 SSE 都落在这条转发链上。
+- 转发会把 `Origin` / `Sec-Fetch-Site` 抹掉换成它自己的 host cookie，非 `dsh-app://app` 的来源在主进程就被 403——**同源这道门在桌面版是由宿主先把的**，我们的门退化成"允许本机进程"那一支。防线位置变了，这件事写在部署文档里，不装作我们的门还在第一线。
+- 沙箱词表没变（`danger-full-access` 仍在），本地引擎照旧。
+- **实测**：直接打本机运行中的桌面版宿主端口，`/voice/call/state`、`/voice/provision/state`、`/voice/provision/disk` 三个只读端点全部 200，内容取自 `desktop` 这份 profile 的配置（`tone: marimba`、`phase: ready`）——服务端那一半在桌面运行时里确实激活了。同端口 `GET /` 是 401：宿主自己的路径要 cookie，而插件注册的路由不在那道门后面，这一点也照实写进了部署文档。
+- 桌面版的更新源（`download.deepseek.com/dsh-desk/feeds/…`，channel `nightly`）和 npm 的 `latest` **各走各的**，所以它可能带一个比 npm 更新、甚至不在我们声称范围内的运行时版本。那时宿主会静默跳过插件，症状是「插件页面里 dsh-voice-call 的设置项不见了」。
 
-已经在 0.2.0-rc.1 上的，把插件更到 0.3.8 就回来了。`dsh plugin allow-version` 能给旧版发一张精确版本的豁免状，但那是拿没验证过的组合在跑。
+设置卡、铃声试听、来电卡片这几项要在真界面里点一次才算验收——**插件不热加载**，换完版本记得重载或重启桌面版。
 
 ## ⚙️ 配置
 
@@ -119,7 +127,7 @@ dsh 0.2.0-rc.1 把 `peerDependencies` 从一句警告变成了加载判定：范
 ## 💻 兼容性
 
 - **平台** —— Windows 10/11、macOS、Linux 三平台都在 CI 上跑，289 个测试全绿。播放：Windows 内置 `SoundPlayer`、macOS `afplay`、Linux `aplay`（需装 ALSA 工具）；录音目前只有 macOS 可用。
-- **harness** —— 同时支持 `0.1.7-rc.2` 与 `0.2.0-rc.1`：`peerDependencies` 写成 `^0.1.7-rc.2 || ^0.2.0-rc.1`，devDependencies 与 CI 锁在 0.2.0-rc.1。从 0.2.0-rc.1 起这份声明决定**加载还是跳过**（不只是警告），所以基线换版时它会跟着动，`test/harness-compat.test.ts` 用宿主自己的判定函数盯着它。
+- **harness** —— 同时支持 `0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.0-rc.2`：`peerDependencies` 写成 `^0.1.7-rc.2 || ^0.2.0-rc.1`（后一条覆盖整段 0.2.0-rc.x），devDependencies 与 CI 锁在 0.2.0-rc.2。从 0.2.0-rc.1 起这份声明决定**加载还是跳过**（不只是警告），所以基线换版时它会跟着动，`test/harness-compat.test.ts` 用宿主自己的判定函数盯着它。**桌面版**（`@deepseek-ai/dsh-desktop`）带的运行时就是 0.2.0-rc.2，共享包、scheme 转发、沙箱词表逐项核对见 [docs/deployment.md](docs/deployment.md#-桌面版兼容性全文)。
 - **`durableEvents` 请保持 `false`** —— 插件事件没有注册入口，写入 `voice/*` 事件会让那份会话历史再也加载不了。这条是实测到的，别的新版本上未验证过开启的后果。
 - **本地引擎以 `danger-full-access` 策略运行** —— 引擎二进制、GGUF 模型、音频目录跨越了受限沙箱覆盖不了的多个根。**部署前请评估这条信任边界。**
 
@@ -154,7 +162,7 @@ pnpm build       # tsc + 客户端 bundle
 
 ## 🗺 路线图
 
-已发布到 0.3.8：通话域 → 专属来电卡片 → 一键装配与 11 条铃声 → 三平台复核 → 等问题振铃 → 跟上 dsh 0.2.0-rc.1。下一版：**错过来电的语音信箱 + AI 已读回执**（`src/domain/voicemail.ts`，事件类型已预留）。v1.0 冻结 schema，发布稳定版。
+已发布到 0.3.9：通话域 → 专属来电卡片 → 一键装配与 11 条铃声 → 三平台复核 → 等问题振铃 → 跟上 dsh 0.2.0-rc.1/rc.2 与桌面版。下一版：**错过来电的语音信箱 + AI 已读回执**（`src/domain/voicemail.ts`，事件类型已预留）。v1.0 冻结 schema，发布稳定版。
 
 ## 🤖 署名 —— 这个项目是谁做的
 
