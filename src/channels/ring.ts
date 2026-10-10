@@ -1,14 +1,19 @@
 /**
  * The ring channel: how an offered call reaches the human and comes back with
- * a decision. v0.1 ships ONE channel — the built-in user-questions prompt
- * (`ask_user_question`), which the web UI renders as a modal question with
- * options. The human literally holds the answer key: the call never plays a
- * sound until they pick 接听.
+ * a decision. Every channel implements this one contract, and `callMode` picks
+ * which one rings — the offer-call pipeline does not know or care which
+ * presentation carried it. The human literally holds the answer key: the call
+ * never plays a sound until they pick 接听.
  *
- * FUTURE channels (same contract, plug in behind this interface):
- * - v0.2: a dedicated call-card UI (ring animation, caller identity, 接听/拒接
- *   buttons) driven over the client↔host RPC seam (`voice/answer` endpoint).
- * - v0.3: auto-answer for narration (callMode `direct`) and voicemail.
+ * The channels that exist today:
+ * - `card` (the default, v0.2): the dedicated call-card UI — ring animation,
+ *   caller identity, 接听/拒接/稍后再说 buttons — over the `/voice/call` web
+ *   routes (`CallCardRingChannel`), degrading to the prompt below when no
+ *   call-card client is connected.
+ * - `ask` (v0.1): the built-in user-questions prompt (`ask_user_question`),
+ *   which the web UI renders as a modal question with options.
+ * - `direct` (v0.3): accepts immediately, for already-confirmed narration.
+ * - `off` (v0.3): refuses before ringing — no channel, no sound.
  *
  * @module dsh-voice-call/channels/ring
  */

@@ -3,6 +3,29 @@
 > 从 [README](../README.md) 搬出来的发版账本。首页只留"最新版一句话"，这里按版本倒序保留全文。
 > 每个版本的发布说明在 [GitHub Releases](https://github.com/PandaPolo/dsh-voice-call/releases) 也有一份。
 
+## 0.3.10 —— 第一次装好，浮出来的就是卡片
+
+**这个插件的默认来电方式同时写在一个仓库的四处，而唯一对用户生效的那一处，从 v0.2 交付卡片那天起就没跟着动过。** `callMode` 分别写在：随包发布的 `cordis.patch.yml`、`Config` schema 的 `.default()`、`resolveConfig` 的 `??`、设置卡的显示回落 `FALLBACK`。0.3.9 时这四处**彼此一致**，都写着 `ask`——所以这不是"某个文件里打错了一个字"。
+
+要紧的是优先级：`cordis.patch.yml` 是 `package.json` 里声明的 `dsh.bundle.patch`，也在 `files` 里，所以它是装插件时**真正写进 profile 的那一行**。那一行有值，schema 的 `.default()` 就永远轮不到。于是"默认是弹窗"这条事实被另外三处一致的样子掩护得很好，而**新用户实际拿到的从来只由第一处决定**。
+
+作者自己的机器看不见这件事——他的 profile 早就照 README 的示例显式写了 `callMode: card`，用户那一行盖住 bundle 层。第一次交到别人手上（"我设法说服我弟弟装了一下"）就现形了：第一通电话是弹窗，不是那张花了整个 v0.2 做出来的卡片。
+
+| 项目 | 改动 |
+|---|---|
+| 默认来电方式 | 四处一起翻成 `card`：`cordis.patch.yml`、`Config.default()`、`resolveConfig`、设置卡 `FALLBACK` |
+| 为什么这个默认是安全的 | `card` 不等于"没卡片就拒接"。`CallCardRingChannel` 在没有 SSE 订阅者时退回 `ask` 弹窗，headless 组合照样有一条能接的路；这条回落关系现在由 `test/bundle-config.test.ts` 钉住 |
+| 已有配置 | 显式写了 `callMode: ask` 的 profile **一个字都不受影响**——用户自己那行永远优先。这一版只改变"从没写过这个字段的人得到什么" |
+| 新增 `test/bundle-config.test.ts` | 逐行读随包那份 `cordis.patch.yml`，把它钉的**每一个字段**和 `resolveConfig` 与 schema 的默认值对齐；`audioDir` 单独按"`~/.dsh/voice` 展开之后等不等于 `defaultAudioDir()`"比；并要求这些字段一个都不许悄悄消失（删一行就让守卫变红是这条测试的失败条件之一） |
+| 它第一次跑就咬到的东西 | `Config['~standard'].validate({})` 对 `.volatile()` 字段返回的是 cosmokit 引用，不是字面值。直接拿它跟 patch 比，测试会"以错误的理由通过"；改成用仓库自己的 `plainConfig()` 拆开再比 |
+| 为什么不用 YAML 库 | `yaml` 在这台机器上只是 `.pnpm/` 里的传递依赖，不是本插件声明的依赖。点名一个宿主不保证的东西，正是 `src/plain.ts:12-17` 为同一件事立的规矩——所以解析是手写的行解析 |
+| 注释纠偏 | `src/channels/ring.ts` 的头注释还写着"v0.1 ships ONE channel"，并把来电卡片与 `direct` 列为 FUTURE——那两条通道 0.3.x 之前就都交付了。现在写成"四条通道，`callMode` 选一条，默认那条是卡片" |
+| 测试 | 289 → **294**（守卫 5 条）。`pnpm typecheck` 三份（服务端 / 客户端 / 测试）全过，`pnpm build` 干净，客户端 bundle 70143 → 70144 字节；三平台 CI 矩阵见下一次推送 |
+
+**和 0.3.7、0.3.8 是同一个病。** 三次都是"声明有两处真相，测试只看了一处"：0.3.7 是插件自己的配置 schema 从没走过宿主的校验入口（一个 `volatile` 套 `volatile` 就能让插件完全不激活，而 270 个测试全绿）；0.3.8 是兼容性声明从没走过宿主的加载判定（0.2.0-rc.1 直接把整个 bundle 跳过，284 个测试全绿）；这次是"默认来电方式"从没被任何测试跟随包那一份对过。修法也一样，不是把值改对就收工，是把两处真相请进同一条断言——`pnpm pack` 出来的 tarball 里那三处产物（`cordis.patch.yml`、`lib/index.js`、`lib/client.js`）现在也是逐字段核过的。
+
+**给已经装过的人：不用等这一版。** `callMode` 是 `.volatile()` 字段，打开「插件 → dsh-voice-call → 设置」，把「来电方式」选成**来电卡片**，下一次振铃就生效，不用重载插件也不用重启。（README 里"插件不热加载"说的是换版本那件事，不是这个字段。）
+
 ## 0.3.9 —— 基线 0.2.0-rc.2，并把桌面版查了一遍
 
 dsh 的 `latest` 和 `next` 现在都指到 **0.2.0-rc.2**，同时 DeepSeek Harness 出了**桌面版**（`@deepseek-ai/dsh-desktop`，Electron 44，自带 node 24.18.1 与 pnpm 11.7.0）。这一版做两件事：把基线跟到 rc.2，以及把插件依赖的每条缝隙在桌面版实际装出来的那份运行时里逐条对过。

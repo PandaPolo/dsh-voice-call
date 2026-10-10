@@ -41,11 +41,11 @@ const SPEAK_LEG_CAP_MS = 300_000;
 
 /** Everything the offer-call pipeline needs; injected so tests run with fakes. */
 export interface OfferCallDeps {
-  /** The ring channel (ask-user by default, direct when callMode is direct). */
+  /** The ring channel (the call card by default, direct when callMode is direct). */
   readonly ring: RingChannel;
   /** The live calling agent (the web user-questions provider requires it). */
   readonly agent?: Agent;
-  /** Resolve the current call mode (default `ask`). */
+  /** Resolve the current call mode (default `card`). */
   readonly callMode: () => CallMode;
   /**
    * The owning tool call's signal, handed to the ring channel so cancelling the

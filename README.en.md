@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
   <img src="https://img.shields.io/badge/harness-0.2.0--rc.2-5b5bd6" alt="DSH 0.2.0-rc.1 and 0.2.0-rc.2, declared as ^0.2.0-rc.1" />
   <img src="https://img.shields.io/badge/desktop-DeepSeek%20Harness-5b5bd6" alt="Checked item by item against the desktop app (dsh-desktop) runtime 0.2.0-rc.2" />
-  <img src="https://img.shields.io/badge/tests-289%20green-1f883d" alt="289 tests green" />
+  <img src="https://img.shields.io/badge/tests-294%20green-1f883d" alt="294 tests green" />
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@
 Three rules the whole project is built on:
 
 - **The agent owns the dialling right.** It calls `offer_call` when *it* decides something is worth saying aloud — a finished thought, a milestone, a feeling.
-- **The human owns the answer key.** A call rings as a dedicated call card or a modal (接听 / 拒接 / 稍后再说); **nothing is ever played without consent**.
+- **The human owns the answer key.** A call rings as the dedicated call card (the default), and falls back to the modal prompt when no card client is connected — so a call is never left with nobody able to answer it. 接听 / 拒接 / 稍后再说; **nothing is ever played without consent**.
 - **Rejection teaches.** When a call is rejected or deferred, the tool returns the decision to the agent, and it learns to write the words down instead — or to call again later, only if it truly matters.
 
 ## 🚀 Install (desktop app)
@@ -100,6 +100,8 @@ The parts that need a real click — the settings card rendering in Electron, th
 
 Lives in the profile's `cordis.patch.yml`. **Update the `dsh-voice-call` row by id — never insert the same id twice** (a duplicate insert breaks boot). All of it is also editable from the settings card:
 
+**A first install rings the card.** The `cordis.patch.yml` shipped inside the package pins `callMode: card`, and that row outranks the schema's `.default()` — it is the one place that decides what a new user actually gets. `test/bundle-config.test.ts` pins every field of it against the plugin's own defaults; up to 0.3.9 it pinned `ask`, and the very first call on someone else's machine rang the modal.
+
 ```yaml
 - id: dsh-voice-call
   config:
@@ -110,7 +112,7 @@ Lives in the profile's `cordis.patch.yml`. **Update the `dsh-voice-call` row by 
         bin: D:\crispasr\crispasr.exe
         model: D:\crispasr\models\qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf
         codec: D:\crispasr\models\qwen3-tts-tokenizer-12hz-q8_0.gguf
-    callMode: card             # card | ask | direct | off
+    callMode: card             # card (default) | ask | direct | off
     readReplies: false         # narration (or toggle live with /voice on)
     durableEvents: false       # keep false — see Compatibility
     audioDir: ~/.dsh/voice     # audio output dir
@@ -128,7 +130,7 @@ Every field, explained: **[docs/deployment.en.md](docs/deployment.en.md)**.
 
 ## 💻 Compatibility
 
-- **Platforms** — Windows 10/11, macOS and Linux all run in CI, 289 tests green. Playback: built-in `SoundPlayer` on Windows, `afplay` on macOS, `aplay` on Linux (needs ALSA tools); recording is currently macOS only.
+- **Platforms** — Windows 10/11, macOS and Linux all run in CI, 294 tests green. Playback: built-in `SoundPlayer` on Windows, `afplay` on macOS, `aplay` on Linux (needs ALSA tools); recording is currently macOS only.
 - **Harness** — `0.1.7-rc.2`, `0.2.0-rc.1` and `0.2.0-rc.2` are supported: `peerDependencies` declares `^0.1.7-rc.2 || ^0.2.0-rc.1` (the second arm covers the whole 0.2.0-rc.x run), with devDependencies and CI pinned to 0.2.0-rc.2. From 0.2.0-rc.1 that declaration decides **load or skip** — not warn — so `test/harness-compat.test.ts` checks it against the host's own predicate whenever a baseline moves. The **desktop app** (`@deepseek-ai/dsh-desktop`) bundles 0.2.0-rc.2 as its runtime and was audited item by item: shared packages, the `dsh-app://app` request path, streaming, and the sandbox vocabulary — see [docs/deployment.en.md](docs/deployment.en.md#-desktop-compatibility-in-full).
 - **Keep `durableEvents` at `false`** — there is no registration seam for plugin events, and appending `voice/*` events makes that session history unloadable. Measured on 0.1.5-rc.6; turning it on has not been verified on newer builds.
 - **The local engine runs under `danger-full-access`** — engine binary, GGUF models and the audio directory span more roots than a confined sandbox can cover. **Assess this trust boundary before deploying.**
@@ -158,13 +160,13 @@ The same-origin gate on the write endpoints, the call card's routing seam, and t
 ```bash
 pnpm install
 pnpm typecheck   # covers src/, src/client/ and test/
-pnpm test        # node --test, 289 cases
+pnpm test        # node --test, 294 cases
 pnpm build       # tsc + the client bundle
 ```
 
 ## 🗺 Roadmap
 
-Shipped through 0.3.9: the call domain → the dedicated call card → one-click provisioning and eleven ringtones → the three-platform audit → the waiting-question ring → keeping up with dsh 0.2.0-rc.1/rc.2 and the desktop app. Next: **voicemail for missed calls + AI read receipts** (`src/domain/voicemail.ts`, event types already reserved). v1.0 freezes the schema.
+Shipped through 0.3.10: the call domain → the dedicated call card → one-click provisioning and eleven ringtones → the three-platform audit → the waiting-question ring → keeping up with dsh 0.2.0-rc.1/rc.2 and the desktop app → **the card is what a fresh install rings with** (all four default-value places aligned, plus a drift guard that reads the shipped patch). Next: **voicemail for missed calls + AI read receipts** (`src/domain/voicemail.ts`, event types already reserved). v1.0 freezes the schema.
 
 ## 🤖 Credits — who made this
 

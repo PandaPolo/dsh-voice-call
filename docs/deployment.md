@@ -84,7 +84,7 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
         bin: D:\crispasr\crispasr.exe                          # 引擎可执行文件（绝对路径）
         model: D:\crispasr\models\qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf
         codec: D:\crispasr\models\qwen3-tts-tokenizer-12hz-q8_0.gguf
-    callMode: card             # card（专属来电卡片）| ask（弹窗询问）| direct（直接接听）| off（拒绝来电）
+    callMode: card             # 默认 card（专属来电卡片）| ask（弹窗询问）| direct（直接接听）| off（拒绝来电）
     callCard:                  # 来电卡片外观与振铃行为（callMode: card 时生效）
       callerName: DeepSeek     # 卡片上显示的来电者名字
       ringTimeoutMs: 30000     # 铃声持续时间；超时来电记为 missed（不无限挂起 agent）
@@ -112,7 +112,7 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
 | `tts.rate` | 1–600 | 语速（词/分钟）。设置卡上只给 慢 150 / 中 180 / 快 220 三档；数字留给直接改配置的人 |
 | `tts.crispasr` | `bin` / `model` / `codec` | 引擎与两个 GGUF 模型的**绝对路径** |
 | `stt.backend` | `whisper-local` / `openai` / `macos` / `fake` | 留空自动探测 |
-| `callMode` | `card` / `ask` / `direct` / `off` | 来电方式：专属卡片 / 弹窗询问 / 直接接听 / 关闭 |
+| `callMode` | `card` / `ask` / `direct` / `off` | 来电方式，**默认 `card`**（专属卡片；无卡片客户端连着时自动退回弹窗询问） |
 | `callCard.callerName` | 任意名字 | 来电卡片显示的来电者名字，默认 `DeepSeek` |
 | `callCard.ringTimeoutMs` | 1000–600000 | 铃声持续时间（毫秒），默认 30000；超时记为 `missed` |
 | `callCard.ringtone` | `true` / `false` | 卡片弹起时是否播放铃声，默认 `true`。铃声是插件自己合成的 WAV，不是任何第三方音频；弹起的卡片上还有一个「静音」，只关当次来电 |
@@ -136,7 +136,7 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
 1. 打开一个会话，输入 `/voice` —— 应显示 `stt: … · tts: crispasr · readReplies: off` 以及 `audioDir: …`；
 2. 让 agent 说一句："用 `speak` 工具说'你好'。" —— 听到声音即成功；
 3. 完整通话测试："你有 `offer_call` 工具——有什么值得说的就打电话给我。" 点 **接听**，声音从扬声器播出；
-4. 来电卡片测试：配置 `callMode: card` 后重拨一次——右下角浮出振铃卡片（脉冲动画 + 来电者身份），点 **接听** 后卡片转为"已接听"并开始播放；
+4. 来电卡片测试：**默认就是卡片**，第 3 步浮出的即右下角振铃卡片（脉冲动画 + 来电者身份）；想确认弹窗那条通路，把 `callMode` 设为 `ask` 再拨一次，设成 `card` 而此刻没有卡片客户端连着，则自动回落弹窗——不会把这通电话变成"没人能接"。
 5. 排查配置时看 `~/.dsh/profiles/desktop/`（桌面版）或 `~/.dsh/profiles/web/`（CLI）里的 `package.json` 与 `cordis.patch.yml`；要合成后的完整配置树，可临时装一个全局 CLI 跑 `dsh --profile desktop --dump-config`。
 
 ## 8️⃣ 平台差异
@@ -153,7 +153,7 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
 |---|---|
 | 桌面版启动崩溃 | `cordis.patch.yml` 里同一 id 被 insert 了两次——删掉重复行，改为按 id 更新 |
 | 插件似乎没加载 | 先看桌面版「插件」页里 dsh-voice-call 有没有设置项——没有基本就是宿主跳过了它。再核对 `~/.dsh/profiles/desktop/package.json`：`dependencies` 里的版本对不对、`dsh.profile.bundles` 里有没有 `dsh-voice-call`。插件不热加载，改完要重载插件或重启桌面版 |
-| 升级 dsh / 桌面版之后插件整个不见了（工具、设置卡、来电卡片一起没了） | 0.2.0-rc.1 起宿主按 `peerDependencies` 决定加载还是跳过，判定不通过就整块 bundle 不加载。桌面版是 GUI，那行 `skipping profile bundle "dsh-voice-call": … is incompatible with dsh <版本>` 不会弹给你看——症状就是插件凭空消失。先更到声明了该基线的插件版本（0.3.9 覆盖 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2）；急用时插件管理页能给"某个插件版本 + 某个运行时版本"发一张精确豁免（对应 CLI 的 `dsh plugin allow-version`），但那是明知未验证仍要跑。想拿到那行原文，可以临时装一个全局 CLI：`dsh --profile desktop --dump-config` 的头几行就是宿主的判定输出 |
+| 升级 dsh / 桌面版之后插件整个不见了（工具、设置卡、来电卡片一起没了） | 0.2.0-rc.1 起宿主按 `peerDependencies` 决定加载还是跳过，判定不通过就整块 bundle 不加载。桌面版是 GUI，那行 `skipping profile bundle "dsh-voice-call": … is incompatible with dsh <版本>` 不会弹给你看——症状就是插件凭空消失。先更到声明了该基线的插件版本（0.3.10 与 0.3.9 的 peer 声明一字未改，覆盖 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2）；急用时插件管理页能给"某个插件版本 + 某个运行时版本"发一张精确豁免（对应 CLI 的 `dsh plugin allow-version`），但那是明知未验证仍要跑。想拿到那行原文，可以临时装一个全局 CLI：`dsh --profile desktop --dump-config` 的头几行就是宿主的判定输出 |
 | 插件显示"异常"、完全不激活 | 配置 schema 被写坏了（例如给一个已经 `volatile` 的对象再套 `volatile`）——宿主会在启动时打印 `ValidationError`，看那一行指出的是哪个字段 |
 | 合成失败（exit ≠ 0） | 检查 `bin` / `model` / `codec` 三个路径是否为存在的绝对路径；codec 模型不能缺；CrispASR 需 ≥ 0.8.28 |
 | 来电振铃后没有声音 | 先看卡片有没有写明「浏览器拦住了铃声」——那是浏览器的自动播放策略，点一下页面就会响；否则是播放问题：Windows 确认输出为 wav，Linux 安装 ALSA 工具，macOS 用 `afplay` |
@@ -175,7 +175,7 @@ D:\crispasr\                     # 你的引擎目录（Windows 示例）
 | Shell 沙箱 | 本地引擎命令以显式 `danger-full-access` 策略运行——引擎二进制、GGUF 模型、音频目录跨越了受限沙箱模式无法覆盖的多个根。**部署前请评估此信任边界。** |
 | 写接口 | 五个改状态的端点（`/voice/call/answer`、`/voice/provision/{prepare,adopt,cancel,cleanup}`）先查 `Sec-Fetch-Site`，跨站的直接 403；没有这个头时退回比对 `Origin` 与 `Host`。宿主 webserver 本身不带任何鉴权（只有 gzip 中间件），`host` 还可以配成 `0.0.0.0`，所以在 CLI/浏览器部署里这道门是浏览器攻击面上唯一的屏障。本机进程（curl 等）不带这些头，仍然可调用——回环端口没有共享密钥可查，这是明说的残余风险。**桌面版下这条门不由我们把**：主进程转发时把 `Origin`/`Sec-Fetch-Site`/`Host`/`Cookie` 全删掉、换成它自己的 host cookie，非 `dsh-app://app` 的来源在主进程就被 403，于是我们的路由看到的是"没有任何来源头的本机请求"，走的是放行那一支。详见「桌面版兼容性（全文）」。 |
 | 来电卡片 | 走 webserver 路由缝隙（SSE `/voice/call/events` + `POST /voice/call/answer`，载荷即预留的 `VoiceAnswerPayload` 契约）；仅 web 组合可用，headless 自动回落弹窗/拒接。同源信任级别与音频路由一致。应答处理里插件抛出的异常被围栏在路由内（回 5xx 带原因），不会变成进程级未捕获异常——0.3.7 补的。 |
-| 测试 | 289 个单元/路由测试在 Linux / Windows / macOS 上全绿（`pnpm test`，CI 三平台矩阵）；`pnpm typecheck` 同时检查 `src/`、`src/client/` 和 `test/`——测试代码此前从不在类型检查范围内。插件自己的配置 schema 走一遍宿主的校验入口，插件声明的 harness 兼容性走一遍宿主的判定函数（`test/harness-compat.test.ts`），后者同时钉住"devDependencies 锁的版本必须在声称的基线里"和"没跑过的大版本不许声称"。 |
+| 测试 | 294 个单元/路由测试在 Linux / Windows / macOS 上全绿（`pnpm test`，CI 三平台矩阵）；`pnpm typecheck` 同时检查 `src/`、`src/client/` 和 `test/`——测试代码此前从不在类型检查范围内。插件自己的配置 schema 走一遍宿主的校验入口（`test/plugin-config.test.ts`），插件声明的 harness 兼容性走一遍宿主的判定函数（`test/harness-compat.test.ts`），后者同时钉住"devDependencies 锁的版本必须在声称的基线里"和"没跑过的大版本不许声称"。随包发布的 `cordis.patch.yml` 里每个字段都逐个和插件自己的默认值对齐（`test/bundle-config.test.ts`）——那一行比 schema 的 `.default()` 优先，是新用户实际拿到什么的那一处。 |
 ## 🔒 桌面版兼容性（全文）
 
 DeepSeek Harness 桌面版（`@deepseek-ai/dsh-desktop`）是把整套 harness 打包进 Electron 的独立发行物。下面每条都是从这台机器上装好的那份 `app.asar`、它带的 `dsh/desktop-runtime.json` 和 `resources/app.asar.unpacked/` 里读出来的，不是按 CLI 的行为推的。插件版本 0.3.9 对着它逐项核对。

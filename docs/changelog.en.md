@@ -6,6 +6,29 @@
 >
 > 中文版：[changelog.md](changelog.md)
 
+## What changed in 0.3.10 — the first call on a fresh install now rings the card
+
+**This plugin kept the default ring mode in four places, and the one place that actually reaches a user had not moved since the card shipped in v0.2.** `callMode` is written in the `cordis.patch.yml` that ships inside the package, in the `Config` schema's `.default()`, in `resolveConfig`'s `??`, and in the settings card's display `FALLBACK`. In 0.3.9 all four **agreed**: `ask`. So this was never a typo in one file.
+
+What matters is precedence. That `cordis.patch.yml` is the manifest's `dsh.bundle.patch` and it is listed in `files`, so it is **the row that gets written into the profile when the plugin is installed**. While that row carries a value, the schema's `.default()` never applies — which meant "the default is a modal" stayed well hidden behind three consistent-looking places, while **what a new user gets had only ever been decided by the first one**.
+
+The author's own machine could not see it: his profile had long since pinned `callMode: card` by hand, following the README example, and a user row outranks the bundle layer. The first time the plugin went onto someone else's machine — "I talked my brother into installing it" — it surfaced: the first call was a modal, not the card that cost an entire v0.2 to build.
+
+| Item | Change |
+|---|---|
+| Default ring mode | All four places flipped to `card` together: `cordis.patch.yml`, `Config.default()`, `resolveConfig`, and the settings card `FALLBACK` |
+| Why that default is safe | `card` does not mean "refuse if no card is around". `CallCardRingChannel` degrades to the `ask` prompt when no SSE subscriber is connected, so a headless composition still has a path a human can answer — and `test/bundle-config.test.ts` now pins that degradation contract |
+| Existing configs | A profile that explicitly says `callMode: ask` is **untouched** — the user's own row always wins. This release changes only what someone who never wrote the field gets |
+| New `test/bundle-config.test.ts` | Reads the shipped `cordis.patch.yml` line by line and aligns **every field it pins** with what `resolveConfig` and the schema default to; `audioDir` is compared as "does `~/.dsh/voice` expand to `defaultAudioDir()`"; and it requires that none of those fields quietly disappear (deleting a row turning the guard red is one of its failure conditions) |
+| What it bit on the first run | `Config['~standard'].validate({})` returns a cosmokit reference, not a literal, for a `.volatile()` field. Comparing that against the patch would have made the test pass **for the wrong reason**; it now detaches through the repo's own `plainConfig()` first |
+| Why no YAML library | On this machine `yaml` exists only as a transitive dependency under `.pnpm/`, not as one this plugin declares. Naming something the host does not guarantee is exactly the rule `src/plain.ts:12-17` sets down for the same reason — so the parse is hand-written and line-based |
+| Comment corrections | `src/channels/ring.ts` still opened with "v0.1 ships ONE channel" and listed the call card and `direct` as FUTURE — both shipped well before 0.3.x. It now describes four channels, one chosen by `callMode`, defaulting to the card |
+| Tests | 289 → **294** (five guards). All three `tsc` passes (server / client / test) clean, `pnpm build` clean, client bundle 70143 → 70144 bytes; the three-platform CI matrix is checked on the push that ships this release |
+
+**Same disease as 0.3.7 and 0.3.8.** Three times over, the pattern is "the declaration lives in two places and a test only ever read one": 0.3.7 — the plugin's own config schema had never been put through the host's validation entry point (one `volatile` nested in another deactivated the whole plugin while 270 tests stayed green); 0.3.8 — the compatibility claim had never been put through the host's load predicate (0.2.0-rc.1 skipped the entire bundle with 284 tests green); this time — the default ring mode had never been read against the copy that ships. The fix is the same shape too: not "put the right value in", but "put both sources of truth into one assertion". The three artefacts inside the packed tarball (`cordis.patch.yml`, `lib/index.js`, `lib/client.js`) are now verified field by field as well.
+
+**If you already have it installed, you do not need this release.** `callMode` is a `.volatile()` field: open Plugins → dsh-voice-call → Settings, pick 来电卡片 for 来电方式, and the very next ring uses the card — no plugin reload, no restart. (The README's "nothing hot-reloads here" is about swapping versions, not about this field.)
+
 ## What changed in 0.3.9 — baseline 0.2.0-rc.2, and an audit of the desktop app
 
 npm's `latest` and `next` for dsh both point at **0.2.0-rc.2** now, and DeepSeek Harness has shipped a **desktop app** (`@deepseek-ai/dsh-desktop`: Electron 44, its own node 24.18.1 and pnpm 11.7.0). This release does two things: follows the baseline to rc.2, and checks every seam the plugin depends on against the runtime that the desktop app actually installs.

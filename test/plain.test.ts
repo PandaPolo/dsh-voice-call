@@ -53,7 +53,7 @@ describe('voiceConfigSource', () => {
 
   it('resolves an empty config to the documented baseline', () => {
     const current = voiceConfigSource(undefined);
-    assert.equal(current().callMode, 'ask');
+    assert.equal(current().callMode, 'card');
     // An unset `audioDir` stays empty here; `resolveAudioDir` owns the
     // `~/.dsh/voice` fallback so the home directory is resolved once, at mount.
     assert.equal(current().audioDir, '');

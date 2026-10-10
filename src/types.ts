@@ -64,11 +64,12 @@ export interface CrispasrEngineConfig {
 }
 
 /**
- * Ring/answer behaviour for `offer_call`. `ask` routes the call through the
- * human confirmation channel (the light-weight v0.1 answer: the built-in
- * user-questions prompt). `card` (v0.2) rings the dedicated call-card UI —
- * ring animation, caller identity, 接听/拒接 buttons — falling back to the
- * `ask` prompt when no call-card client is connected. `direct` accepts
+ * Ring/answer behaviour for `offer_call`. `card` is the default — the v0.2
+ * dedicated call-card UI (ring animation, caller identity, 接听/拒接/稍后再说
+ * buttons) over the `/voice/call` web routes — falling back to the `ask` prompt
+ * when no call-card client is connected, so a headless composition still reaches
+ * a human. `ask` routes the call through the human confirmation channel (the
+ * light-weight v0.1 answer: the built-in user-questions prompt). `direct` accepts
  * immediately (no ring) for already-confirmed narration. `off` refuses calls
  * outright.
  */
@@ -153,7 +154,7 @@ export interface VoiceConfig {
    */
   readonly durableEvents: boolean;
   /**
-   * How `offer_call` rings the human: `ask` (default), `card`, `direct`, or
+   * How `offer_call` rings the human: `card` (default), `ask`, `direct`, or
    * `off`. This is the v0.1 "answer key" — the human always holds it.
    */
   readonly callMode: CallMode;
@@ -234,7 +235,7 @@ export function resolveConfig(raw: VoiceConfigInput | undefined): VoiceConfig {
     },
     readReplies: raw?.readReplies ?? false,
     durableEvents: raw?.durableEvents ?? false,
-    callMode: raw?.callMode ?? 'ask',
+    callMode: raw?.callMode ?? 'card',
     callCard: {
       callerName: raw?.callCard?.callerName ?? 'DeepSeek',
       ringTimeoutMs: raw?.callCard?.ringTimeoutMs ?? 30_000,

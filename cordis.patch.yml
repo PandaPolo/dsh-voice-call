@@ -27,5 +27,11 @@
         # is marked SessionEvent.ignorable, and Session.append offers plugin
         # events no way to set it — so a voice/* event poisons history loading.
         durableEvents: false
-        callMode: ask
+        # `card` is what a first call should look like: the human still holds the
+        # same three keys (接听/拒接/稍后再说), and with no call-card client
+        # connected the card channel degrades to the `ask` prompt instead of
+        # refusing the call — so this default is safe on a headless composition.
+        # `test/bundle-config.test.ts` pins this row to the schema default: the two
+        # used to disagree, and every fresh install rang the prompt.
+        callMode: card
         audioDir: ~/.dsh/voice

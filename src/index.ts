@@ -14,9 +14,10 @@
  * - `speak({ text, voice?, rate? })` — direct TTS on a background job
  *   (from dsh-voice; the crispasr backend is the local default here).
  * - `readReplies` + `/voice` — per-session narration toggle.
- * - `callMode: ask | card | direct | off` — how calls ring the human; `card`
- *   rings the v0.2 call-card UI (ring animation, caller identity) over the
- *   `/voice/call` web routes, with the v0.1 prompt as its fallback.
+ * - `callMode: card | ask | direct | off` — how calls ring the human; `card` is
+ *   the default and rings the v0.2 call-card UI (ring animation, caller
+ *   identity, 接听/拒接/稍后再说) over the `/voice/call` web routes, degrading to
+ *   the v0.1 prompt when no call-card client is connected.
  *
  * Upgrade-ready contracts (reserved, not implemented in v0.1):
  * `src/rpc/contract.ts` (call-card UI endpoints), `src/domain/voicemail.ts`
@@ -112,7 +113,7 @@ export const Config = z.object({
   // without plugin-event support (rc.6 refuses unknown event types on history
   // load — an appended voice/* event poisons the session log).
   durableEvents: z.boolean().default(false),
-  callMode: z.union(['ask', 'card', 'direct', 'off']).default('ask').volatile(),
+  callMode: z.union(['card', 'ask', 'direct', 'off']).default('card').volatile(),
   callCard: z.object({
     callerName: z.string(),
     ringTimeoutMs: z.number().min(1000).max(600_000).volatile(),
@@ -341,8 +342,8 @@ export function apply(ctx: Context, rawConfig: VoiceConfigInput): void {
     }, exec),
   });
 
-  // The call domain: the ring channel follows callMode (ask → human prompt,
-  // card → the v0.2 call-card UI with the v0.1 prompt as fallback,
+  // The call domain: the ring channel follows callMode (card — the default → the
+  // v0.2 call-card UI, degrading to the v0.1 prompt; ask → human prompt;
   // direct → immediate accept; off → refused).
   const askChannel = (): RingChannel => new AskUserRingChannel((request) => ctx.userQuestions.ask({
     questions: request.questions,

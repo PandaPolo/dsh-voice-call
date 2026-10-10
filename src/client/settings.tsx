@@ -134,7 +134,7 @@ interface CardValues {
 const FALLBACK: CardValues = {
   voice: 'dylan',
   rate: 180,
-  callMode: 'ask',
+  callMode: 'card',
   ringTimeoutMs: 30_000,
   theme: 'system',
   palette: 'host',

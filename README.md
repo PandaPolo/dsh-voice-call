@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
   <img src="https://img.shields.io/badge/harness-0.2.0--rc.2-5b5bd6" alt="DSH 0.2.0-rc.1 与 0.2.0-rc.2，声明范围 ^0.2.0-rc.1" />
   <img src="https://img.shields.io/badge/desktop-DeepSeek%20Harness-5b5bd6" alt="桌面版（dsh-desktop）运行时 0.2.0-rc.2 已逐项核对" />
-  <img src="https://img.shields.io/badge/tests-289%20green-1f883d" alt="289 个测试全绿" />
+  <img src="https://img.shields.io/badge/tests-294%20green-1f883d" alt="294 个测试全绿" />
 </p>
 
 <p align="center">
@@ -30,7 +30,7 @@
 三条规矩，整个项目围着它们转：
 
 - **agent 拥有拨号权** —— 它在自己觉得值得说的时候调用 `offer_call`：一个完成的念头、一个里程碑、一句想大声说出来的话。
-- **人类拥有接听权** —— 来电以弹窗或专属来电卡片呈现（接听 / 拒接 / 稍后再说），**未经同意绝不播放**。
+- **人类拥有接听权** —— 来电以专属来电卡片呈现（默认；接听 / 拒接 / 稍后再说），**未经同意绝不播放**。没有卡片客户端连着的时候自动退回弹窗询问，不会变成"这通电话没人能接"。
 - **拒接也是教育** —— 被拒接或推迟时，工具把你的决定原样返回给 agent，它学会改用文字写下来，或者只在真正重要时再试一次。
 
 ## 🚀 安装（桌面版）
@@ -98,6 +98,8 @@ dsh 0.2.0-rc.1 把 `peerDependencies` 从一句警告变成了**加载判定**�
 
 写在 profile 的 `cordis.patch.yml` 里，**按 `id` 更新，绝不重复 insert**（同一 id 插两次会导致启动崩溃）。下面这些也都能在插件设置页里改：
 
+**第一次装好就是来电卡片。** 随包发布的那份 `cordis.patch.yml` 会写 `callMode: card`——这一行比 schema 的 `.default()` 优先，所以它是新用户实际拿到什么的那一处；`test/bundle-config.test.ts` 把它和插件自己的默认值逐个字段钉在一起，0.3.9 及之前它钉的是 `ask`，第一次装好弹的是弹窗。
+
 ```yaml
 - id: dsh-voice-call
   config:
@@ -108,7 +110,7 @@ dsh 0.2.0-rc.1 把 `peerDependencies` 从一句警告变成了**加载判定**�
         bin: D:\crispasr\crispasr.exe
         model: D:\crispasr\models\qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf
         codec: D:\crispasr\models\qwen3-tts-tokenizer-12hz-q8_0.gguf
-    callMode: card             # card 卡片 | ask 弹窗 | direct 直接接听 | off 拒绝
+    callMode: card             # card 卡片（默认）| ask 弹窗 | direct 直接接听 | off 拒绝
     readReplies: false         # 朗读回复（会话里 /voice on 可临时开）
     durableEvents: false       # 保持 false，见下方兼容性
     audioDir: ~/.dsh/voice     # 音频目录
@@ -126,7 +128,7 @@ dsh 0.2.0-rc.1 把 `peerDependencies` 从一句警告变成了**加载判定**�
 
 ## 💻 兼容性
 
-- **平台** —— Windows 10/11、macOS、Linux 三平台都在 CI 上跑，289 个测试全绿。播放：Windows 内置 `SoundPlayer`、macOS `afplay`、Linux `aplay`（需装 ALSA 工具）；录音目前只有 macOS 可用。
+- **平台** —— Windows 10/11、macOS、Linux 三平台都在 CI 上跑，294 个测试全绿。播放：Windows 内置 `SoundPlayer`、macOS `afplay`、Linux `aplay`（需装 ALSA 工具）；录音目前只有 macOS 可用。
 - **harness** —— 同时支持 `0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.0-rc.2`：`peerDependencies` 写成 `^0.1.7-rc.2 || ^0.2.0-rc.1`（后一条覆盖整段 0.2.0-rc.x），devDependencies 与 CI 锁在 0.2.0-rc.2。从 0.2.0-rc.1 起这份声明决定**加载还是跳过**（不只是警告），所以基线换版时它会跟着动，`test/harness-compat.test.ts` 用宿主自己的判定函数盯着它。**桌面版**（`@deepseek-ai/dsh-desktop`）带的运行时就是 0.2.0-rc.2，共享包、scheme 转发、沙箱词表逐项核对见 [docs/deployment.md](docs/deployment.md#-桌面版兼容性全文)。
 - **`durableEvents` 请保持 `false`** —— 插件事件没有注册入口，写入 `voice/*` 事件会让那份会话历史再也加载不了。这条是实测到的，别的新版本上未验证过开启的后果。
 - **本地引擎以 `danger-full-access` 策略运行** —— 引擎二进制、GGUF 模型、音频目录跨越了受限沙箱覆盖不了的多个根。**部署前请评估这条信任边界。**
@@ -156,13 +158,13 @@ dsh 0.2.0-rc.1 把 `peerDependencies` 从一句警告变成了**加载判定**�
 ```bash
 pnpm install
 pnpm typecheck   # src/ + src/client/ + test/ 三份都在类型检查范围内
-pnpm test        # node --test，289 个用例
+pnpm test        # node --test，294 个用例
 pnpm build       # tsc + 客户端 bundle
 ```
 
 ## 🗺 路线图
 
-已发布到 0.3.9：通话域 → 专属来电卡片 → 一键装配与 11 条铃声 → 三平台复核 → 等问题振铃 → 跟上 dsh 0.2.0-rc.1/rc.2 与桌面版。下一版：**错过来电的语音信箱 + AI 已读回执**（`src/domain/voicemail.ts`，事件类型已预留）。v1.0 冻结 schema，发布稳定版。
+已发布到 0.3.10：通话域 → 专属来电卡片 → 一键装配与 11 条铃声 → 三平台复核 → 等问题振铃 → 跟上 dsh 0.2.0-rc.1/rc.2 与桌面版 → **第一次装好浮出来的就是那张卡片**（四处默认值终于对齐，并加了一条防漂移的守卫）。下一版：**错过来电的语音信箱 + AI 已读回执**（`src/domain/voicemail.ts`，事件类型已预留）。v1.0 冻结 schema，发布稳定版。
 
 ## 🤖 署名 —— 这个项目是谁做的
 
