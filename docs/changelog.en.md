@@ -6,6 +6,27 @@
 >
 > 中文版：[changelog.md](changelog.md)
 
+## What changed in 0.3.11 — the card still rings after a reload
+
+**Three routes outlived the plugin instance that owned them.** In 0.3.10 the routes were registered by **calling the installers directly** from inside the `ctx.inject(['webServer'], …)` callback: `mountRoute()` kept the return value for `/voice/audio` alone, and the disposers handed back by `installCallCardRoutes` and `installProvisionRoutes` were dropped on the spot. The host webserver keys handlers by path, and that disposer is **the only way back out** — it is bound to no fiber, so the host will not hold it for you.
+
+So the moment the plugin reloads (the plugins page toggle, a market toggle, `patchReload: live` — which is what this machine runs), the old handlers stay in the table while the new instance's mount dies on its first statement with `webserver: duplicate prefix route "/voice/audio"`. The throw lands mid-callback: the two installers after it never run, and the table is still answering from the **old instance's `CallBoard`**.
+
+That matters more than the error line: `/voice/call/events` is answered by a board nobody rings any more, so the new `CallCardRingChannel` never sees a subscriber and degrades to the `ask` prompt by design. What a user sees is "the card stopped working", with one duplicate line in the log — **a silent downgrade, not a crash**.
+
+| Item | Change |
+|---|---|
+| Fix | New `src/web-mount.ts`: `mountWebRoutes(ctx, mounts)` wraps each installer in `ctx.effect(() => …, label)`; `src/index.ts` hands the whole mount to the **scoped ctx** of `ctx.inject(['webServer'], (scoped) => …)` |
+| Why the scoped ctx | `ctx.inject(deps, cb)` *is* `ctx.plugin({ inject, apply: cb })`: when a dependency changes or the fiber unloads, cordis releases the effects registered on that child fiber first and re-runs the callback when the service is back. On the root ctx the only way out is a hand-held `dispose()` — the exact line 0.3.10 broke |
+| While there | All three routes now mount in one place (`src/web-mount.ts`), each labelled (`voice-call: /voice/audio` and friends), and all three roll back together; "did anyone keep that installer's return value?" is no longer a question |
+| New `test/web-mount.test.ts` | Seven cases over a **real cordis `Context`** and a fake webserver that mirrors the host (same throw on a path collision, disposer deletes the entry): all three prefixes mount / only two without a configured engine / none at all without a webserver / **the table is empty once the fiber unloads** / a webserver that goes away and comes back re-mounts (the audio prefix attempted exactly twice) / re-activating after a reload of the same fiber no longer collides |
+| What it bit on the first run | The last case re-creates the 0.3.10 mount shape verbatim (`let disposeRoute` + `mountRoute()` + the dropped `installCallCardRoutes` return value) and asserts "two routes are still in the table after unload" plus "the second activation must throw `duplicate prefix route "/voice/audio"`" — that negative control is this fix's failure condition |
+| Tests | 294 → **301** (seven new). All three `tsc` passes clean, `pnpm build` clean, the client bundle is byte-identical at 70144 (this release touches the host half only) |
+
+**Not the same disease as 0.3.7 / 0.3.8 / 0.3.10, but the same root: the host's own entry point was bypassed.** Those three were "one fact written in two places and a test that read one of them"; this one is **the host handing the release back to you and it being dropped**. So the new guard does not compare two constants — it **unloads the plugin on a real cordis** and then looks at the route table. The negative control also proves the guard turns red the day someone strips the `ctx.effect` wrapper again.
+
+**If you already have it installed:** only sessions that reloaded the plugin are affected; an unreloaded 0.3.10 and 0.3.11 behave identically. Reload the plugin after updating (the client half is untouched).
+
 ## What changed in 0.3.10 — the first call on a fresh install now rings the card
 
 **This plugin kept the default ring mode in four places, and the one place that actually reaches a user had not moved since the card shipped in v0.2.** `callMode` is written in the `cordis.patch.yml` that ships inside the package, in the `Config` schema's `.default()`, in `resolveConfig`'s `??`, and in the settings card's display `FALLBACK`. In 0.3.9 all four **agreed**: `ask`. So this was never a typo in one file.

@@ -3,6 +3,27 @@
 > 从 [README](../README.md) 搬出来的发版账本。首页只留"最新版一句话"，这里按版本倒序保留全文。
 > 每个版本的发布说明在 [GitHub Releases](https://github.com/PandaPolo/dsh-voice-call/releases) 也有一份。
 
+## 0.3.11 —— 重载之后，卡片照样来电
+
+**三条路由活得比拥有它们的插件实例更久。** 0.3.10 里，路由是在 `ctx.inject(['webServer'], …)` 的回调里**直接调用 installer** 挂上去的：`mountRoute()` 只留了 `/voice/audio` 那一份返回值，`installCallCardRoutes` 与 `installProvisionRoutes` 交回来的 disposer 被当场丢掉。宿主的 webserver 把 handler 放进一张按 path 索引的表，而 `register()` 返回的那个 disposer 是**唯一的回收通道**——它不挂在任何 fiber 上，宿主不会替你保管。
+
+于是插件一重载（插件页开关、市场里的 toggle、`patchReload: live` —— 这台机器就是 live），旧 handler 仍留在表里，而新实例的挂载在第一句就撞上 `webserver: duplicate prefix route "/voice/audio"`。异常发生在 `ctx.inject` 回调中段：后面两条 installer 从此不再执行，而表里应答的仍是**旧实例的 `CallBoard`**。
+
+这一点比"报个错"更要紧：`/voice/call/events` 由没人振铃的那个 board 应答，新实例的 `CallCardRingChannel` 永远等不到订阅者，于是按设计退回 `ask` 弹窗。用户看到的是"卡片不灵了"，日志里只有一行 duplicate——**静默降级，不是崩溃**。
+
+| 项目 | 改动 |
+|---|---|
+| 修法 | 新增 `src/web-mount.ts`：`mountWebRoutes(ctx, mounts)` 把三条 installer 各自包进 `ctx.effect(() => …, label)`；`src/index.ts` 把整份 mount 交给 `ctx.inject(['webServer'], (scoped) => …)` 的 **scoped ctx** |
+| 为什么挂在 scoped ctx 上 | `ctx.inject(deps, cb)` 就是 `ctx.plugin({ inject, apply: cb })`：依赖变化或 fiber 卸载时，cordis 先释放这个子 fiber 上登记的 effect，再（必要时）重跑回调。挂在根 ctx 上就只能靠手工 `dispose()`——0.3.10 正是把那条手工线走断了 |
+| 顺带 | 三条路由的挂载现在写在同一处（`src/web-mount.ts`），带标签（`voice-call: /voice/audio` 等），卸载时一起回卷；不再有"某个 installer 的返回值到底被谁接住了"这种问题 |
+| 新增 `test/web-mount.test.ts` | 7 条用例，跑在**真 cordis `Context`** 上，配一个复刻宿主语义的假 webserver（撞 path 时抛同一句话，disposer 删表）：三条前缀一起挂 / 没配引擎时只挂两条 / 没有 webserver 时一条都不挂 / **fiber 卸载后路由表清空** / webserver 服务先卸载再提供后重新挂载（audio 前缀恰好尝试两次）/ 同一 fiber 重载后再激活不撞车 |
+| 它第一次跑就咬到的东西 | 最后一条用例把 0.3.10 的挂载形状原样复刻（`let disposeRoute` + `mountRoute()` + 丢掉 `installCallCardRoutes` 的返回值）：断言"卸载后表里还留着两条路由"，并要求第二次激活抛 `duplicate prefix route "/voice/audio"`——这条负控就是这次修复的失败条件 |
+| 测试 | 294 → **301**（新增 7 条）。三份 `tsc` 全过，`pnpm build` 干净，客户端 bundle 70144 字节不变（这次只动服务端） |
+
+**和 0.3.7 / 0.3.8 / 0.3.10 不是同一个病，但根上仍是"没走宿主自己的入口"。** 那三次是"同一件事写了两处、测试只读了一处"；这次是**宿主把释放权交回你手里，而它被丢掉了**。所以新增的守卫不是比对两个常量，而是让插件在真 cordis 上**被卸载一次**，再看路由表是不是空的——那条负控同时证明：哪天有人再把 `ctx.effect` 摘掉，它会红。
+
+**已经装着的用户**：只有"重载过插件"的会话受这一版影响；没重载过的 0.3.10 与 0.3.11 行为一致。更新后重载插件即可（客户端这次一个字没动）。
+
 ## 0.3.10 —— 第一次装好，浮出来的就是卡片
 
 **这个插件的默认来电方式同时写在一个仓库的四处，而唯一对用户生效的那一处，从 v0.2 交付卡片那天起就没跟着动过。** `callMode` 分别写在：随包发布的 `cordis.patch.yml`、`Config` schema 的 `.default()`、`resolveConfig` 的 `??`、设置卡的显示回落 `FALLBACK`。0.3.9 时这四处**彼此一致**，都写着 `ask`——所以这不是"某个文件里打错了一个字"。

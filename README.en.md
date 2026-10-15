@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
   <img src="https://img.shields.io/badge/harness-0.2.0--rc.2-5b5bd6" alt="DSH 0.2.0-rc.1 and 0.2.0-rc.2, declared as ^0.2.0-rc.1" />
   <img src="https://img.shields.io/badge/desktop-DeepSeek%20Harness-5b5bd6" alt="Checked item by item against the desktop app (dsh-desktop) runtime 0.2.0-rc.2" />
-  <img src="https://img.shields.io/badge/tests-294%20green-1f883d" alt="294 tests green" />
+  <img src="https://img.shields.io/badge/tests-301%20green-1f883d" alt="301 tests green" />
 </p>
 
 <p align="center">
@@ -130,7 +130,7 @@ Every field, explained: **[docs/deployment.en.md](docs/deployment.en.md)**.
 
 ## 💻 Compatibility
 
-- **Platforms** — Windows 10/11, macOS and Linux all run in CI, 294 tests green. Playback: built-in `SoundPlayer` on Windows, `afplay` on macOS, `aplay` on Linux (needs ALSA tools); recording is currently macOS only.
+- **Platforms** — Windows 10/11, macOS and Linux all run in CI, 301 tests green. Playback: built-in `SoundPlayer` on Windows, `afplay` on macOS, `aplay` on Linux (needs ALSA tools); recording is currently macOS only.
 - **Harness** — `0.1.7-rc.2`, `0.2.0-rc.1` and `0.2.0-rc.2` are supported: `peerDependencies` declares `^0.1.7-rc.2 || ^0.2.0-rc.1` (the second arm covers the whole 0.2.0-rc.x run), with devDependencies and CI pinned to 0.2.0-rc.2. From 0.2.0-rc.1 that declaration decides **load or skip** — not warn — so `test/harness-compat.test.ts` checks it against the host's own predicate whenever a baseline moves. The **desktop app** (`@deepseek-ai/dsh-desktop`) bundles 0.2.0-rc.2 as its runtime and was audited item by item: shared packages, the `dsh-app://app` request path, streaming, and the sandbox vocabulary — see [docs/deployment.en.md](docs/deployment.en.md#-desktop-compatibility-in-full).
 - **Keep `durableEvents` at `false`** — there is no registration seam for plugin events, and appending `voice/*` events makes that session history unloadable. Measured on 0.1.5-rc.6; turning it on has not been verified on newer builds.
 - **The local engine runs under `danger-full-access`** — engine binary, GGUF models and the audio directory span more roots than a confined sandbox can cover. **Assess this trust boundary before deploying.**
@@ -160,13 +160,13 @@ The same-origin gate on the write endpoints, the call card's routing seam, and t
 ```bash
 pnpm install
 pnpm typecheck   # covers src/, src/client/ and test/
-pnpm test        # node --test, 294 cases
+pnpm test        # node --test, 301 cases
 pnpm build       # tsc + the client bundle
 ```
 
 ## 🗺 Roadmap
 
-Shipped through 0.3.10: the call domain → the dedicated call card → one-click provisioning and eleven ringtones → the three-platform audit → the waiting-question ring → keeping up with dsh 0.2.0-rc.1/rc.2 and the desktop app → **the card is what a fresh install rings with** (all four default-value places aligned, plus a drift guard that reads the shipped patch). Next: **voicemail for missed calls + AI read receipts** (`src/domain/voicemail.ts`, event types already reserved). v1.0 freezes the schema.
+Shipped through 0.3.11: the call domain → the dedicated call card → one-click provisioning and eleven ringtones → the three-platform audit → the waiting-question ring → keeping up with dsh 0.2.0-rc.1/rc.2 and the desktop app → the card is what a fresh install rings with (all four default-value places aligned, plus a drift guard that reads the shipped patch) → **the card still rings after a reload** (the three routes are released with the plugin instance instead of outliving it). Next: **voicemail for missed calls + AI read receipts** (`src/domain/voicemail.ts`, event types already reserved). v1.0 freezes the schema.
 
 ## 🤖 Credits — who made this
 

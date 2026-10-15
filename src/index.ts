@@ -40,7 +40,6 @@ import type {} from '@deepseek-ai/dsh-user-questions';
 import z from '@deepseek-ai/schemastery';
 import { AudioStore, confineAudioInput, resolveAudioDir } from './audio.ts';
 import { CallBoard } from './callcard/board.ts';
-import { installCallCardRoutes } from './callcard/web.ts';
 import { DEFAULT_PALETTE, PALETTE_IDS } from './client/palettes.ts';
 import { DEFAULT_TONE, TONE_IDS } from './client/tones.ts';
 import { createRecordFn, createSttBackend, createTtsBackend } from './backends/index.ts';
@@ -58,7 +57,6 @@ import { DEFAULT_SOURCE, defaultModels, recommendedVariant } from './provision/m
 import { ProvisionRunner } from './provision/state.ts';
 import type { PrepareRequest } from './provision/state.ts';
 import { detectDevice, unknownDevice } from './provision/detect.ts';
-import { installProvisionRoutes } from './provision/web.ts';
 import { createUnpacker } from './provision/unpack.ts';
 import { makeShellRunner } from './backends/runner.ts';
 import { applyOfferCallTool, buildOfferCallDeps } from './tools/offer-call.ts';
@@ -67,7 +65,7 @@ import { applyTranscribeTool, buildTranscribeDeps } from './tools/transcribe.ts'
 import { resolveConfig, type VoiceConfig } from './types.ts';
 import type { VoiceConfigInput } from './types.ts';
 import { WaitingQuestionNudge } from './waiting/nudge.ts';
-import { installAudioRoute } from './web.ts';
+import { mountWebRoutes } from './web-mount.ts';
 
 /** Cordis plugin name (also the config key under `plugins:`). */
 export const name = 'dsh-voice-call';
@@ -251,30 +249,33 @@ export function apply(ctx: Context, rawConfig: VoiceConfigInput): void {
   // simply never gains subscribers and the card channel falls back to the
   // v0.1 prompt channel.
   const callBoard = new CallBoard();
-  let disposeRoute: (() => void) | undefined;
-  const mountRoute = (): void => {
-    disposeRoute?.();
-    disposeRoute = installAudioRoute(ctx, audioRoot);
-  };
   // Web routes mount via ctx.inject: the webserver fiber boots in parallel
   // with this plugin, so a plain ctx.get('webServer') in apply() races and
   // silently registers nothing (the harness's own web-app waits the same
   // way). In headless compositions the service never appears and the
   // callback simply never fires.
-  ctx.inject(['webServer'], () => {
-    mountRoute();
-    installCallCardRoutes(ctx, callBoard, () => {
-      const { theme, palette, ringtone, tone } = current().callCard;
-      return { theme, palette, ringtone, tone };
+  //
+  // They also mount on the *scoped* context, not this one: that is the fiber
+  // cordis unloads when the webserver goes away or the plugin is reloaded, and
+  // mounting through it is what releases the old prefixes first — the webserver
+  // throws on a duplicate (kind, path), and a throw here would abandon the
+  // routes below it (0.3.10 shipped exactly that). See `src/web-mount.ts`.
+  ctx.inject(['webServer'], (scoped) => {
+    mountWebRoutes(scoped, {
+      audioRoot,
+      board: callBoard,
+      appearance: () => {
+        const { theme, palette, ringtone, tone } = current().callCard;
+        return { theme, palette, ringtone, tone };
+      },
+      provision: provisionRequest() === undefined ? undefined : {
+        runner: provisionRunner,
+        layout: provisionRoot,
+        request: () => provisionRequest() as PrepareRequest,
+        device: () => deviceReport,
+        usableFromConfig: () => probeCrispasr(withProvisionedEngine(current(), provisioned)),
+      },
     });
-    if (provisionRequest() !== undefined) {
-      installProvisionRoutes(
-        ctx, provisionRunner, provisionRoot,
-        () => provisionRequest() as PrepareRequest,
-        () => deviceReport,
-        () => probeCrispasr(withProvisionedEngine(current(), provisioned)),
-      );
-    }
   });
   const audioStore = (): AudioStore => new AudioStore(audioRoot);
   const audioPath = (): string => audioStore().pathFor(`voice-speak-${speakSeq()}`, 'wav');

@@ -6,7 +6,7 @@ verified locally except the push and the publish themselves.
 
 ## 0. Preflight (verified locally)
 
-- `pnpm test` — 294 green on the current baseline: arg-schema units (the exact-one
+- `pnpm test` — 301 green on the current baseline: arg-schema units (the exact-one
   `{file|record}` union, `speak`'s optional `voice`/`rate`), backend
   selection with faked probes, the fake text-to-text backend end-to-end
   through both tool pipelines, the `voice-note` renderer (node.data from a
@@ -15,6 +15,8 @@ verified locally except the push and the publish themselves.
   the shipped `cordis.patch.yml` against the plugin's own defaults
   (`test/bundle-config.test.ts` — that row outranks `.default()`, so it is what a
   new install really gets),
+  the web-route mount lifecycle (`test/web-mount.test.ts` — a route must not outlive
+  the fiber that owns it),
   plus the macOS `say` integration suite — which skips where `say` is absent.
 - `pnpm typecheck` (host + client + **test** tsconfigs — `test/` was added to the gate
   because a `DeviceReport` used without being imported had been sitting in a route
