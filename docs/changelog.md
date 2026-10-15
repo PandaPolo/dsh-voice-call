@@ -18,7 +18,7 @@
 | 顺带 | 三条路由的挂载现在写在同一处（`src/web-mount.ts`），带标签（`voice-call: /voice/audio` 等），卸载时一起回卷；不再有"某个 installer 的返回值到底被谁接住了"这种问题 |
 | 新增 `test/web-mount.test.ts` | 7 条用例，跑在**真 cordis `Context`** 上，配一个复刻宿主语义的假 webserver（撞 path 时抛同一句话，disposer 删表）：三条前缀一起挂 / 没配引擎时只挂两条 / 没有 webserver 时一条都不挂 / **fiber 卸载后路由表清空** / webserver 服务先卸载再提供后重新挂载（audio 前缀恰好尝试两次）/ 同一 fiber 重载后再激活不撞车 |
 | 它第一次跑就咬到的东西 | 最后一条用例把 0.3.10 的挂载形状原样复刻（`let disposeRoute` + `mountRoute()` + 丢掉 `installCallCardRoutes` 的返回值）：断言"卸载后表里还留着两条路由"，并要求第二次激活抛 `duplicate prefix route "/voice/audio"`——这条负控就是这次修复的失败条件 |
-| 测试 | 294 → **301**（新增 7 条）。三份 `tsc` 全过，`pnpm build` 干净，客户端 bundle 70144 字节不变（这次只动服务端） |
+| 测试 | 294 → **301**（新增 7 条）。三份 `tsc` 全过，`pnpm build` 干净，客户端 bundle 70144 字节不变（这次只动服务端）。三平台 CI 实跑：Linux 与 Windows 各 301 全绿，macOS 303——多出的两条仍是只在有 `say` 的系统上才执行的集成用例。Windows 的第一次跑红了一条时序用例（`test/provision-download.test.ts` 里「传输中途停了」那条），重跑即绿：同一个 run 38685211607 的第二次 attempt，三平台全绿 |
 
 **和 0.3.7 / 0.3.8 / 0.3.10 不是同一个病，但根上仍是"没走宿主自己的入口"。** 那三次是"同一件事写了两处、测试只读了一处"；这次是**宿主把释放权交回你手里，而它被丢掉了**。所以新增的守卫不是比对两个常量，而是让插件在真 cordis 上**被卸载一次**，再看路由表是不是空的——那条负控同时证明：哪天有人再把 `ctx.effect` 摘掉，它会红。
 
