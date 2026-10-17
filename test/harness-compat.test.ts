@@ -20,6 +20,11 @@
  *
  * So this file runs the real predicate over the real manifest for every
  * baseline the README claims, and proves the predicate actually bites.
+ *
+ * Two things moved under it in 0.2.1-rc.2, which is why this file reads the
+ * result structure rather than a logged string: the report field is
+ * `requirements` (it was `peers`), and an own `engines.dsh` now takes over the
+ * whole decision — peers are then ignored. The last case here pins both.
  */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -28,17 +33,19 @@ import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot';
 
 /**
  * Harness releases this plugin claims to run on. Add a line here when claiming
- * one. `0.2.0-rc.2` is also the version the desktop app (`@deepseek-ai/dsh-desktop`)
- * ships as its bundled runtime, so this list is what the packaged desktop build
- * checks the manifest against.
+ * one. `0.2.1-rc.2` is what the desktop app (`@deepseek-ai/dsh-desktop`) ships as
+ * its bundled runtime today, and npm's `next` tag points at the same version
+ * while `latest` is still 0.2.0-rc.2 — so this list is checked by both
+ * distributions, and the desktop one is the one that moves first.
  */
-const SUPPORTED = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2'];
+const SUPPORTED = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2'];
 
 type Manifest = {
   name: string;
   version: string;
   peerDependencies: Record<string, string>;
   devDependencies: Record<string, string>;
+  engines?: Record<string, string>;
   dsh?: { client?: { inject?: string[] } };
 };
 
@@ -90,7 +97,7 @@ describe('harness compatibility declaration', () => {
     for (const runtimeVersion of SUPPORTED) {
       const issue = refused(manifest, runtimeVersion);
       assert.equal(
-        issue === undefined ? '' : JSON.stringify(issue.peers),
+        issue === undefined ? '' : JSON.stringify(issue.requirements),
         '',
         `dsh ${runtimeVersion} would skip the bundle`,
       );
@@ -106,10 +113,26 @@ describe('harness compatibility declaration', () => {
     } as unknown as Manifest;
     const issue = refused(single, '0.2.0-rc.1');
     assert.ok(issue !== undefined, 'a guard that cannot fail is not a guard');
-    assert.deepEqual(Object.keys(issue?.peers ?? {}), ['@deepseek-ai/dsh-tools']);
+    assert.deepEqual(Object.keys(issue?.requirements ?? {}), ['@deepseek-ai/dsh-tools']);
     assert.equal(issue?.exempted, false);
     // …and the same manifest is fine where it was written to be.
     assert.equal(refused(single, '0.1.7-rc.2'), undefined);
+  });
+
+  it('lets the peer list decide, because an own engines.dsh would silence it', () => {
+    // dsh 0.2.1-rc.2 added `engines.dsh`: when the manifest carries one, the
+    // host checks *only* that range and stops reading `peerDependencies`. That
+    // is the weaker guard for us — a peer added later would not have to be
+    // widened, so the declaration would stop meaning "every harness package I
+    // actually touch". Declaring no `engines.dsh` keeps all 20 peers in force.
+    assert.equal(manifest.engines?.dsh, undefined, 'engines.dsh would replace the peer check');
+    // And the shape is proven: a manifest that does carry it is judged alone.
+    const withEngine = {
+      ...manifest,
+      engines: { ...manifest.engines, dsh: '^0.2.1-rc.2' },
+    };
+    assert.equal(refused(withEngine, '0.2.1-rc.2'), undefined);
+    assert.deepEqual(Object.keys(refused(withEngine, '0.1.7-rc.2')?.requirements ?? {}), ['engines.dsh']);
   });
 
   it('keeps every gated devDependency inside the claimed baselines', () => {

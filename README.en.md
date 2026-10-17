@@ -9,9 +9,9 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
-  <img src="https://img.shields.io/badge/harness-0.2.0--rc.2-5b5bd6" alt="DSH 0.2.0-rc.1 and 0.2.0-rc.2, declared as ^0.2.0-rc.1" />
-  <img src="https://img.shields.io/badge/desktop-DeepSeek%20Harness-5b5bd6" alt="Checked item by item against the desktop app (dsh-desktop) runtime 0.2.0-rc.2" />
-  <img src="https://img.shields.io/badge/tests-301%20green-1f883d" alt="301 tests green" />
+  <img src="https://img.shields.io/badge/harness-0.2.1--rc.2-5b5bd6" alt="DSH 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2, declared as ^0.2.0-rc.1" />
+  <img src="https://img.shields.io/badge/desktop-DeepSeek%20Harness-5b5bd6" alt="Hash-compared file by file against the desktop app (dsh-desktop) runtime 0.2.1-rc.2" />
+  <img src="https://img.shields.io/badge/tests-302%20green-1f883d" alt="302 tests green" />
 </p>
 
 <p align="center">
@@ -43,7 +43,7 @@ Three rules the whole project is built on:
 
 > The old CLI flow (`npm install -g @deepseek-ai/dsh`, then `dsh plugin --profile web add dsh-voice-call`) is retired along with the global CLI — plugin management now happens in the desktop app.
 
-> Version requirement: DSH 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 — and 0.2.0-rc.2 is exactly the runtime the desktop app ships with today.
+> Version requirement: DSH 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 — and 0.2.1-rc.2 is exactly the runtime the desktop app ships with today, while npm's `latest` is still 0.2.0-rc.2.
 
 Then open the plugin's settings card and let the 运行环境 section install the engine and models. Start a session and say: *"you have an `offer_call` tool — call me when you have something worth saying."*
 
@@ -81,20 +81,24 @@ The full path from an empty machine to hearing a voice (manual downloads, every 
 
 It ships **off**: turn on 「等问题振铃（实验性新功能）」 in the settings card. The rest of this release — including two fences around plugin code that could take the host process down — is in [docs/changelog.en.md](docs/changelog.en.md).
 
-## 🖥 Running on the new baselines: 0.2.0-rc.1 / rc.2, and the desktop app
+## 🖥 Running on the new baselines: 0.2.1-rc.2, and desktop vs npm
 
-dsh 0.2.0-rc.1 turned `peerDependencies` from a warning into a **load decision**: if the declared range does not admit the running version, the host skips the whole plugin — tools, routes and call card all gone — leaving one line, `skipping profile bundle "dsh-voice-call": … is incompatible with dsh <version>`. That is how 0.3.7 vanished, with 284 tests green: nothing had ever read the manifest. Since 0.3.8 the range is `^0.1.7-rc.2 || ^0.2.0-rc.1` (which covers rc.1 and rc.2), and the **host's own predicate** is now in the suite — `test/harness-compat.test.ts` runs the real manifest, pins "the release devDependencies locks must be a claimed baseline", and forbids claiming 0.3.0, which nobody has run against.
+dsh 0.2.0-rc.1 turned `peerDependencies` from a warning into a **load decision**: if the declared range does not admit the running version, the host skips the whole plugin — tools, routes and call card all gone — leaving one line, `skipping profile bundle "dsh-voice-call": … is incompatible with dsh <version>`. That is how 0.3.7 vanished, with 284 tests green: nothing had ever read the manifest. Since 0.3.8 the range is `^0.1.7-rc.2 || ^0.2.0-rc.1` (that second arm covers the whole 0.2.x run), and the **host's own predicate** is now in the suite — `test/harness-compat.test.ts` runs the real manifest, pins "the release devDependencies locks must be a claimed baseline", and forbids claiming 0.3.0, which nobody has run against.
 
-**The desktop app (`@deepseek-ai/dsh-desktop`, Electron 44) was checked item by item against the runtime it actually installs**, which is 0.2.0-rc.2:
+This release moves devDependencies and CI to **0.2.1-rc.2** (cordis 4.0.5, schemastery 3.18.5). The peer text is unchanged — `^0.2.0-rc.1` already admitted 0.2.1-rc.2. Four baselines are now claimed: 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2, each run through three `tsc` passes and 302 cases in its own dependency tree.
 
-- It shares the same `~/.dsh` home, with its own `desktop` profile — its own `package.json`, `cordis.patch.yml` and `node_modules` beside the CLI's `web` one. All **20 peers we declare are among the 287 shared packages** it ships, at matching versions.
-- Its UI runs on a custom scheme, `dsh-app://app`; requests the page makes to `/voice/...` and `/plugins/...` are forwarded by the main process to `http://127.0.0.1:<random port>`. Our client only ever uses **relative URLs**, so the call card, the settings card and both SSE channels land on that forwarding path.
-- That forwarding **strips `Origin`, `Sec-Fetch-Site`, `Host` and `Cookie`** and substitutes the desktop's own host cookie, and 403s any origin that is not `dsh-app://app` before the request reaches the host. So on desktop our same-origin gate sees no origin headers at all and takes the "local process" branch — the cross-site wall is the main process's, and it is firmer (private port, private cookie). The defence moved; it did not disappear, and the deployment doc says so instead of pretending our gate is still the first line.
-- The sandbox vocabulary is unchanged (`danger-full-access` still there), so the local engine path is unaffected.
-- **Measured**: hitting the host port of the desktop app while it runs returned 200 on all three read endpoints — `/voice/call/state`, `/voice/provision/state`, `/voice/provision/disk` — with values taken from the `desktop` profile (`tone: marimba`, `phase: ready`). The server half genuinely activates on that runtime. `GET /` on the same port is 401: the host's own paths require its cookie, while routes a plugin registers sit outside that door, and the deployment doc says so plainly.
-- What genuinely changed is version coupling: the desktop feed (`download.deepseek.com/dsh-desk/feeds/…`, channel `nightly`) moves independently of npm's `latest`, so the app can carry a runtime outside anything we claim. Then the host skips the plugin silently, and the symptom is "dsh-voice-call has no settings row any more".
+**0.2.1-rc.2 changed the shape of the decision itself**, so the test changed with it and gained a case: the report field `peers` is now `requirements`, and — more importantly — a manifest's own `engines.dsh` now **decides alone**, with `peerDependencies` no longer consulted. We deliberately do not write `engines.dsh`: with all 20 peers in force, "every harness package the code touches is declared" keeps meaning something. Both routes — with and without `engines.dsh` — are pinned by cases now.
 
-The parts that need a real click — the settings card rendering in Electron, the ringtone actually sounding, an accepted call playing the whole sentence, the provisioning bar streaming — are listed as unverified in the deployment doc. Nothing hot-reloads here either: reload the plugin or restart the app after an update.
+**The desktop app (Electron 44.7.0, its own node 24.21.0 and pnpm 11.28.5) now ships 0.2.1-rc.2 as its runtime, while npm's `latest` is still 0.2.0-rc.2** (`next` points at 0.2.1-rc.2) — the app stays one version ahead of npm's stable tag. This time the check went past version strings: the desktop app publishes a per-file sha256 index (`dsh/desktop-runtime.json`, 17261 files), and every package we import was hashed against a plain `npm install @deepseek-ai/dsh@0.2.1-rc.2`:
+
+- The 18 `@deepseek-ai/dsh-*` packages we import, plus cordis / schemastery / cosmokit: **server-side JS is byte-identical**. Same version number, same code in both distributions — proven rather than assumed for the first time.
+- Only four kinds of difference remain, none behavioural: `scripts` is stripped from `package.json`; every `.d.ts`/`.d.ts.map` is stripped (so nothing can type-check against the app's tree, but we ship a prebuilt `lib/`); a few packages carry an extra `lib/types/invariant.js` that no file in the whole runtime imports; and `dsh-client-ui-chat` / `dsh-client-ui-conversation` ship a **rebuild** of `lib/client.js` — different CSS-module name salts, build comments reading `D:\develop\dsh-harness-windows-x64` where npm's copy says `/home/runner/work/deepseek-harness/…`.
+- That last one cannot reach us: our client uses relative URLs and its own class names (`dsh-voice-call-overlay`), never the host's module class names, and the inject target `dsh-client-ui-settings` has an **identical** `client.js` on both sides.
+- **The desktop difference that does matter**: the `desktop` profile is initialised by the app itself (`nodeLinker: hoisted`, `autoInstallPeers: false`, and the `web` bundle template), and its tree holds exactly two harness packages beyond the plugins — `@deepseek-ai/schemastery@3.18.4` and `cosmokit@1.8.5`. pnpm injects our plugin (and three others) onto **those**, while the host runs the asar's 3.18.5 / 1.8.6. **Two schemastery instances in one process.** The plugin is fine because the schemas we hand to the host travel as plain objects, never through `instanceof`; but it is also why the `^3.18.4` peer **must not be raised to 3.18.5** — raising it would exclude a copy that really exists on desktop.
+
+It shares the same `~/.dsh` home, with its own `desktop` profile; its UI runs on the custom scheme `dsh-app://app`, whose main process forwards `/voice/...` and `/plugins/...` to `http://127.0.0.1:<random port>` while **stripping `Origin`, `Sec-Fetch-Site`, `Host` and `Cookie`** and substituting its own host cookie (any other origin gets 403 before the host sees it). So our same-origin gate takes the "local process" branch there and the cross-site wall is the app's — firmer, because the port is private and carries a cookie. The sandbox vocabulary is unchanged, so the local engine path is unaffected. Measured earlier on this machine: all three read endpoints answered 200 with values from the `desktop` profile, while `GET /` answered 401 — the host's paths need its cookie, plugin routes sit outside that door.
+
+The parts that still need a real click — the settings card rendering in Electron, the ringtone actually sounding, an accepted call playing the whole sentence, the provisioning bar streaming — are listed in the deployment doc. Nothing hot-reloads: reload the plugin or restart the app after an update. Full table: [docs/deployment.en.md](docs/deployment.en.md#-desktop-compatibility-in-full).
 
 ## ⚙️ Configuration
 
@@ -130,8 +134,8 @@ Every field, explained: **[docs/deployment.en.md](docs/deployment.en.md)**.
 
 ## 💻 Compatibility
 
-- **Platforms** — Windows 10/11, macOS and Linux all run in CI, 301 tests green. Playback: built-in `SoundPlayer` on Windows, `afplay` on macOS, `aplay` on Linux (needs ALSA tools); recording is currently macOS only.
-- **Harness** — `0.1.7-rc.2`, `0.2.0-rc.1` and `0.2.0-rc.2` are supported: `peerDependencies` declares `^0.1.7-rc.2 || ^0.2.0-rc.1` (the second arm covers the whole 0.2.0-rc.x run), with devDependencies and CI pinned to 0.2.0-rc.2. From 0.2.0-rc.1 that declaration decides **load or skip** — not warn — so `test/harness-compat.test.ts` checks it against the host's own predicate whenever a baseline moves. The **desktop app** (`@deepseek-ai/dsh-desktop`) bundles 0.2.0-rc.2 as its runtime and was audited item by item: shared packages, the `dsh-app://app` request path, streaming, and the sandbox vocabulary — see [docs/deployment.en.md](docs/deployment.en.md#-desktop-compatibility-in-full).
+- **Platforms** — Windows 10/11, macOS and Linux all run in CI, 302 tests green. Playback: built-in `SoundPlayer` on Windows, `afplay` on macOS, `aplay` on Linux (needs ALSA tools); recording is currently macOS only.
+- **Harness** — `0.1.7-rc.2`, `0.2.0-rc.1`, `0.2.0-rc.2` and `0.2.1-rc.2` are supported: `peerDependencies` declares `^0.1.7-rc.2 || ^0.2.0-rc.1` (the second arm covers the whole 0.2.x run), with devDependencies and CI pinned to 0.2.1-rc.2. From 0.2.0-rc.1 that declaration decides **load or skip** — not warn — and from 0.2.1-rc.2 a manifest's own `engines.dsh` would decide *instead of* it, which is exactly why we do not write one; `test/harness-compat.test.ts` checks the manifest against the host's own predicate, both with and without that field. The **desktop app** (`@deepseek-ai/dsh-desktop`) bundles 0.2.1-rc.2 as its runtime and was audited against it file by file, using the app's own sha256 index: shared packages, the `dsh-app://app` request path, streaming, and the sandbox vocabulary — see [docs/deployment.en.md](docs/deployment.en.md#-desktop-compatibility-in-full).
 - **Keep `durableEvents` at `false`** — there is no registration seam for plugin events, and appending `voice/*` events makes that session history unloadable. Measured on 0.1.5-rc.6; turning it on has not been verified on newer builds.
 - **The local engine runs under `danger-full-access`** — engine binary, GGUF models and the audio directory span more roots than a confined sandbox can cover. **Assess this trust boundary before deploying.**
 
@@ -160,13 +164,13 @@ The same-origin gate on the write endpoints, the call card's routing seam, and t
 ```bash
 pnpm install
 pnpm typecheck   # covers src/, src/client/ and test/
-pnpm test        # node --test, 301 cases
+pnpm test        # node --test, 302 cases
 pnpm build       # tsc + the client bundle
 ```
 
 ## 🗺 Roadmap
 
-Shipped through 0.3.11: the call domain → the dedicated call card → one-click provisioning and eleven ringtones → the three-platform audit → the waiting-question ring → keeping up with dsh 0.2.0-rc.1/rc.2 and the desktop app → the card is what a fresh install rings with (all four default-value places aligned, plus a drift guard that reads the shipped patch) → **the card still rings after a reload** (the three routes are released with the plugin instance instead of outliving it). Next: **voicemail for missed calls + AI read receipts** (`src/domain/voicemail.ts`, event types already reserved). v1.0 freezes the schema.
+Shipped through 0.3.12: the call domain → the dedicated call card → one-click provisioning and eleven ringtones → the three-platform audit → the waiting-question ring → keeping up with dsh 0.2.0-rc.1/rc.2 and the desktop app → the card is what a fresh install rings with (all four default-value places aligned, plus a drift guard that reads the shipped patch) → **the card still rings after a reload** (the three routes are released with the plugin instance instead of outliving it) → **the baseline follows 0.2.1-rc.2, with the desktop runtime and the npm tree hash-compared file by file**. Next: **voicemail for missed calls + AI read receipts** (`src/domain/voicemail.ts`, event types already reserved). v1.0 freezes the schema.
 
 ## 🤖 Credits — who made this
 

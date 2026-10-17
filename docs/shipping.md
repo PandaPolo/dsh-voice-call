@@ -6,7 +6,7 @@ verified locally except the push and the publish themselves.
 
 ## 0. Preflight (verified locally)
 
-- `pnpm test` — 301 green on the current baseline: arg-schema units (the exact-one
+- `pnpm test` — 302 green on the current baseline: arg-schema units (the exact-one
   `{file|record}` union, `speak`'s optional `voice`/`rate`), backend
   selection with faked probes, the fake text-to-text backend end-to-end
   through both tool pipelines, the `voice-note` renderer (node.data from a
@@ -35,6 +35,14 @@ verified locally except the push and the publish themselves.
   manifest composes `dsh-voice-call` with its `client.js` bundle, and
   `GET /plugins/??dsh-voice-call/client.js` returns HTTP 200 with the
   loader-format bundle.
+  **Both of those need a `dsh` CLI, which this machine no longer has** — for
+  0.3.12 they were not re-run. The substitute evidence is stronger in one way
+  and weaker in another: the running desktop app was probed directly (all three
+  read endpoints 200 on the 0.2.1-rc.2 runtime, see the desktop bullet), which
+  proves a live activation but not the *packed* artefact, since only what is
+  already in the profile (`0.3.11`) is running. The delta between 0.3.11 and
+  0.3.12 is devDependencies, one test file and documentation — no source line —
+  and `lib/client.js` is byte-for-byte the artefact 0.3.11 shipped.
 - **Dependency pattern**: every `@deepseek-ai/*` package — `schemastery`
   included — is a `peerDependency` (the ecosystem convention; regular deps
   would install duplicate copies into DSH profiles and break tool dispatch),
@@ -46,14 +54,30 @@ verified locally except the push and the publish themselves.
   the host skip the entire bundle — so a baseline bump is not done until the
   peer range has been widened in the same commit and `SUPPORTED` lists both the
   old and the new release. Packages `src/` imports must appear there too: a seam
-  the code touches but the manifest omits is invisible to the gate.
+  the code touches but the manifest omits is invisible to the gate. Two things
+  moved in 0.2.1-rc.2 and the file tracks them: the report field is
+  `requirements` (was `peers`), and an own `engines.dsh` **replaces** the peer
+  check rather than adding to it — which is why the manifest deliberately does
+  not carry one, with a case proving both branches. A bump runs the suite twice,
+  once per dependency tree (new baseline, and 0.1.7-rc.2 with only
+  `dsh-app-boot` raised, since the gate itself did not exist before 0.2.0-rc.1).
 - **Desktop app**: `@deepseek-ai/dsh-desktop` bundles its own dsh runtime, and
   its version moves independently of npm (`nightly` feed on
-  `download.deepseek.com`). On a baseline bump, read the installed
-  `app.asar → dsh/desktop-runtime.json` (`release.version`, `sharedPackages`) and
-  check that every declared peer exists there at a version the gate admits —
-  that is how 0.2.0-rc.2 and the desktop build got claimed. The full table lives
-  in `docs/deployment.md` / `.en.md` under the desktop section.
+  `download.deepseek.com`) — as of 0.3.12 the app is on 0.2.1-rc.2 while npm's
+  `latest` is still 0.2.0-rc.2, so **the desktop build decides**. On a baseline
+  bump, read the installed `app.asar → dsh/desktop-runtime.json`
+  (`release.version`, `sharedPackages`) and check that every declared peer exists
+  there at a version the gate admits. Then go one step further, which is cheap
+  because the app publishes its own `path → sha256` index for all 17261 bundled
+  files: re-hash one file out of the asar to trust the index, and compare that
+  index against a scratch `npm install @deepseek-ai/dsh@<version>` tree, package
+  by package. That is how 0.3.12 established that server-side JS is identical in
+  both distributions, that the only deltas are stripped `.d.ts`/`scripts`, an
+  unwired `lib/types/invariant.js`, and rebuilt `lib/client.js` for two client
+  packages — and that the desktop profile resolves schemastery/cosmokit from its
+  **own** copies (3.18.4 / 1.8.5) while the host runs the asar's 3.18.5 / 1.8.6.
+  The full table lives in `docs/deployment.md` / `.en.md` under the desktop
+  section.
 - **This machine has no global CLI any more** (the desktop app took over plugin
   management). Install/verify work goes through the desktop app's plugin page —
   it runs installs with its bundled pnpm against `~/.dsh/profiles/desktop`.

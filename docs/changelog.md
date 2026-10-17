@@ -3,6 +3,33 @@
 > 从 [README](../README.md) 搬出来的发版账本。首页只留"最新版一句话"，这里按版本倒序保留全文。
 > 每个版本的发布说明在 [GitHub Releases](https://github.com/PandaPolo/dsh-voice-call/releases) 也有一份。
 
+## 0.3.12 —— 基线跟上 0.2.1-rc.2，并把"桌面版那份"和"npm 那份"逐文件对过
+
+**这次要回答的不是"我们的代码在新版本上跑不跑"，而是"桌面版和 npm 装的同一个版本号，是不是同一份东西"。** 桌面版又一次跑在了 npm 前面：它的 `release.version` 已经是 **0.2.1-rc.2**，而 npm 的 `latest` 还停在 0.2.0-rc.2（`next` 才指到 0.2.1-rc.2）。绝大多数用户是在桌面版上装插件的，所以按这一版定下的规矩：**以桌面版为准**。
+
+| 项目 | 改动 |
+|---|---|
+| devDependencies / CI | 锁到 0.2.1-rc.2（cordis `~4.0.5`、schemastery 解析到 3.18.5、`dsh-app-boot` 0.2.1-rc.2）。`pnpm-workspace.yaml` 里那份 `minimumReleaseAgeExclude` 随安装重生成，每个 `@deepseek-ai/*` 条目加上 `\|\| 0.2.1-rc.2`——这是这个仓库一贯的基线更版动作，阈值本身没动 |
+| peerDependencies | **一个字没改**：`^0.1.7-rc.2 \|\| ^0.2.0-rc.1` 本来就含 0.2.1-rc.2。`@deepseek-ai/schemastery` 继续写 `^3.18.4`——桌面版 profile 里真实存在的那一份就是 3.18.4，把它抬到 3.18.5 等于把"我们实际跑的这份"排除在声明之外 |
+| 判定函数自己变了形 | `evaluatePluginCompatibility` 返回结构里 `peers` 改名 `requirements`（测试跟着改）；更大的那条是新增的 `engines.dsh`：**清单里一旦有它，宿主只看它**，`peerDependencies` 完全不参与判定。我们故意不写——20 条 peer 全部生效，"代码摸到的每个 harness 包都被声明过"这条守卫才真的有力。写与不写两种走法现在都由用例钉着 |
+| 声称的基线 | `SUPPORTED` = 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2，两份依赖树各跑一遍：0.2.1-rc.2 一份，0.1.7-rc.2 一份（后者只把 `dsh-app-boot` 抬到 0.2.1-rc.2，因为加载判定本身是 0.2.0-rc.1 才存在的东西） |
+| 源码 | 一行没动。三份 `tsc` 全过，客户端 bundle 仍是 70144 字节 |
+| 测试 | 301 → **302**（新增那条 `engines.dsh` 正反两用） |
+
+**逐文件哈希的做法**：桌面版自己把答案带在身上——`dsh/desktop-runtime.json` 里有 17261 条 `path → sha256`。先抽一份 asar 里的文件回算哈希核对（`dsh-app-boot/lib/index.js`，203572 字节，一字不差），确认这份索引可信，再拿它去比 `npm install @deepseek-ai/dsh@0.2.1-rc.2` 装出来的那棵树：
+
+- 我们 `src/` 真的 import 的 18 个 `@deepseek-ai/dsh-*`，加上 cordis / schemastery / cosmokit，**服务端 JS 全部字节相同**。"同一个版本号在两种发行物里是同一份代码"这件事，第一次是被证明的，不是被假设的。
+- 差异只有四类，都不改变行为：① `package.json` 里的 `scripts` 被删掉；② `.d.ts` 与 `.d.ts.map` 被剥光（所以桌面版那份树没法拿来编译——本仓库一直用 npm 那份，无影响）；③ 若干包多带一份 `lib/types/invariant.js`，而整棵运行时树里**没有任何一处 import 它**，`exports` 里也没有对应子路径，导不进来；④ `dsh-client-ui-chat` / `dsh-client-ui-conversation` 的 `lib/client.js` 是**另一次构建**——CSS module 的类名盐不同，注释里写着 `D:\develop\dsh-harness-windows-x64`，npm 那份是 GitHub runner 的 `/home/runner/work/deepseek-harness/…`。
+- ④ 碰不到我们：客户端只用相对路径和自己的类名（`dsh-voice-call-overlay` 那一套），从不引用宿主的 module 类名；而注入目标 `dsh-client-ui-settings` 的 `client.js` 两边**字节相同**。
+- **桌面版才有的那一条**：`desktop` profile 是 app 自己初始化的（`nodeLinker: hoisted` + `autoInstallPeers: false` 是它写死的模板，bundles 取 `web` 那份），profile 树里除插件外只有 `@deepseek-ai/schemastery@3.18.4` 与 `cosmokit@1.8.5`——pnpm 把我们（和另外三个插件）注入到这两份上，而宿主自己跑的是 asar 里的 3.18.5 / 1.8.6。**同一个进程里两份 schemastery**。插件不受影响，因为我们交给宿主的 schema 走 plain 对象桥接、不做 `instanceof`。
+- profile 那份 `minimumReleaseAgeExclude` 是 `dshmarket` 在维护，不是宿主写的；实测过一次——刚发布、还在 pnpm 发布龄期里的版本会撞 `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`，profile 里留下的是旧版本。阈值不在 profile 那份文件里，`app.asar` 与两份 pnpm 发行物里也没找到写入点，这条如实留着。**实践结论：发完就让用户在桌面版上装，不成立。**
+- **本轮实测**（2026-10-17，桌面版正在运行时）：宿主端口 `127.0.0.1:62998` 上 `/voice/call/state`、`/voice/provision/state`、`/voice/provision/disk` 三个只读端点全部 200，值取自 `desktop` profile（`tone: marimba`、`phase: ready`、`variantId: win-vulkan`、引擎 v0.8.36）；同端口 `GET /` 仍是 401。跑的是 0.2.1-rc.2 运行时 + profile 里的 `dsh-voice-call@0.3.11`。
+
+**和 0.3.7 / 0.3.8 / 0.3.10 / 0.3.11 比，这一版没有 bug 可修**：缝隙都还在原处（`webServer.register` 依旧返回 disposer、判定函数的两种走法都有人看着）。它补的是认知上的一块空白——以前只知道桌面版"带的运行时是几号"，现在知道它和 npm 那一份**逐字节差在哪、那些差碰不碰得到我们**。
+
+**已经装着的用户**：0.3.11 在 0.2.1-rc.2 上本来就加载得进来（peer 范围没变），所以这一版更不更都不影响能不能用；要更的话照旧——插件不热加载，重载或重启桌面版才算。设置卡渲染、铃声响起、接听后播完整句、进度条流式这四件事仍要在真界面点一次，我们没法替。
+
+
 ## 0.3.11 —— 重载之后，卡片照样来电
 
 **三条路由活得比拥有它们的插件实例更久。** 0.3.10 里，路由是在 `ctx.inject(['webServer'], …)` 的回调里**直接调用 installer** 挂上去的：`mountRoute()` 只留了 `/voice/audio` 那一份返回值，`installCallCardRoutes` 与 `installProvisionRoutes` 交回来的 disposer 被当场丢掉。宿主的 webserver 把 handler 放进一张按 path 索引的表，而 `register()` 返回的那个 disposer 是**唯一的回收通道**——它不挂在任何 fiber 上，宿主不会替你保管。
