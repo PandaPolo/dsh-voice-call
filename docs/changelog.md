@@ -14,7 +14,7 @@
 | 判定函数自己变了形 | `evaluatePluginCompatibility` 返回结构里 `peers` 改名 `requirements`（测试跟着改）；更大的那条是新增的 `engines.dsh`：**清单里一旦有它，宿主只看它**，`peerDependencies` 完全不参与判定。我们故意不写——20 条 peer 全部生效，"代码摸到的每个 harness 包都被声明过"这条守卫才真的有力。写与不写两种走法现在都由用例钉着 |
 | 声称的基线 | `SUPPORTED` = 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2，两份依赖树各跑一遍：0.2.1-rc.2 一份，0.1.7-rc.2 一份（后者只把 `dsh-app-boot` 抬到 0.2.1-rc.2，因为加载判定本身是 0.2.0-rc.1 才存在的东西） |
 | 源码 | 一行没动。三份 `tsc` 全过，客户端 bundle 仍是 70144 字节 |
-| 测试 | 301 → **302**（新增那条 `engines.dsh` 正反两用） |
+| 测试 | 301 → **302**（新增那条 `engines.dsh` 正反两用）。CI 三平台实跑（run 39024760650，全绿）：Linux 302、Windows 302、macOS 304——多出的两条仍是只在有 `say` 的系统上才执行的集成用例；本地两份依赖树各跑一遍也都是 302 全绿 |
 
 **逐文件哈希的做法**：桌面版自己把答案带在身上——`dsh/desktop-runtime.json` 里有 17261 条 `path → sha256`。先抽一份 asar 里的文件回算哈希核对（`dsh-app-boot/lib/index.js`，203572 字节，一字不差），确认这份索引可信，再拿它去比 `npm install @deepseek-ai/dsh@0.2.1-rc.2` 装出来的那棵树：
 

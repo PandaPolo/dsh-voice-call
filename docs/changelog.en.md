@@ -17,7 +17,7 @@
 | The gate itself changed shape | In `evaluatePluginCompatibility` the report field `peers` is now `requirements` (the test followed). Bigger: a manifest carrying its own `engines.dsh` is judged on **that range alone**, `peerDependencies` not consulted at all. We deliberately do not write one — with all 20 peers in force, "every harness package the code touches is declared" stays a real guard. Both paths, with and without `engines.dsh`, are pinned by cases now |
 | Claimed baselines | `SUPPORTED` = 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2, each run through its own dependency tree: the 0.2.1-rc.2 install, and a 0.1.7-rc.2 install (where only `dsh-app-boot` is raised, since the load decision was born in 0.2.0-rc.1) |
 | Source | Not one line. Three `tsc` passes clean; the client bundle is still 70144 bytes |
-| Tests | 301 → **302** (the new `engines.dsh` case, positive and negative in one) |
+| Tests | 301 → **302** (the new `engines.dsh` case, positive and negative in one). The three-platform CI ran for real (run 39024760650, all green): 302 on Linux, 302 on Windows, 304 on macOS — the two extra are still the integration cases that only run where `say` exists. Both local dependency trees were run through the suite as well, 302 each |
 
 **How the comparison was done**: the app carries its own answer key — `dsh/desktop-runtime.json` holds 17261 `path → sha256` entries. One file was pulled out of the asar and re-hashed to prove the index is honest (`dsh-app-boot/lib/index.js`, 203572 bytes, exact match), then it was used against a plain `npm install @deepseek-ai/dsh@0.2.1-rc.2`:
 
