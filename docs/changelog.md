@@ -36,9 +36,9 @@
 - `--dump-config` 里我们的条目带着 `callMode: card`、`durableEvents: false`、`audioDir: ~/.dsh/voice`——bundle 的 patch 层确实排在 `.default()` 之上。
 - 只读端点全 200：`/voice/call/state` 回了 `{"calls":[],"appearance":{…,"tone":"classic"}}`，`/voice/provision/state` 回了 `phase: unprepared` / `variantId: win-cpu`（都是这份 scratch profile 自己的值，没碰 `~/.dsh`）；同端口 `GET /` 仍是 401；headless profile 只停在 `MISSING_CREDENTIAL`。
 - **一条新事实，值得单独记**：rc.3 的宿主把插件 bundle 的取法改成**必须带 `&rev=`**。boot manifest 广告的是 `plugins/??dsh-voice-call/client.js&rev=ece8910da42d`，按它取 → **200、70215 字节、`text/javascript`**，内容里能看到我们的类名与全部 `/voice/*` 路径；不带 rev 直接打 `plugins/??dsh-voice-call/client.js` → **404**。原因在 `@deepseek-ai/dsh-client-modules` 的 `bundleResource()`：它拿 `pathname + search` 去精确查一张预生成的表。我们自己的清单从不写死这个 URL（组合由宿主负责），所以插件不受影响——但文档里"打一次就是 200"那句从此不再成立，已经改掉。
-- 桌面版这一版还换了 runtime 目录：node 现在在 `resources/runtime/bin/node`，pnpm 在 `resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs`，旁边多一份 `runtime.json` 写着 `desktopVersion: 0.2.1-rc.3` 和自带 python 工具链。`versions.json` 说 pnpm 是 11.28.5，但直接跑那份 `pnpm.mjs --version` 报 11.23.0——这条照实记下，没下定论。
+- 桌面版这一版还换了 runtime 目录：node 现在在 `resources/runtime/bin/node`，pnpm 在 `resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs`，旁边多一份 `runtime.json` 写着 `desktopVersion: 0.2.1-rc.3` 和自带 python 工具链。`versions.json` 说 pnpm 是 11.28.5，但在一个 PATH 上有全局 pnpm 11.23.0 的 shell 里直接跑那份 `pnpm.mjs --version` 会报 11.23.0——把 PATH 收干净后同一份文件报 **11.28.5**，而在 profile 里真正完成一次安装的也是 11.28.5。所以这不是 app 虚报，是"用外部 shell 调它自带的 CLI"这个动作会被 PATH 骗。
 
-**这轮仍然没测到的**：桌面版此刻没在运行（进程列表里没有 `DeepSeek Harness.exe`），所以 0.2.1-rc.3 上的桌面 live probe 没做；设置卡渲染、铃声响起、接听后播完整句、装配进度条流式这四件事，还是得在真界面点一次才算数。更完版本记得重载插件或重启桌面版——插件不热加载。
+**这轮仍然没测到的**：桌面版此刻没在运行（进程列表里没有 `DeepSeek Harness.exe`），所以 0.2.1-rc.3 上的桌面 live probe 没做；设置卡渲染、铃声响起、接听后播完整句、装配进度条流式这四件事，还是得在真界面点一次才算数。更完版本记得重载插件或重启桌面版——插件不热加载。**本机 `desktop` profile 已经装到 0.3.13**（用 app 自带的 node 24.21.0 + pnpm 11.28.5 装，`package.json` 与 `pnpm-lock.yaml` 各留一份 `.pre-0.3.13.bak`；`node_modules/dsh-voice-call` 里 `client.js` 70144 字节，其余七个插件依赖原样没动），但 app 没启动，所以那份 0.3.13 还在盘上、没进内存——你下次打开桌面版加载的才是它。
 
 **已经装着的用户**：0.3.12 在 0.2.1-rc.3 上本来就加载得进来（peer 一个字没改），所以这版更不更都不影响能不能用。真要更，拿到的字节和 0.3.12 完全一样——这是一次纯基线声明的更新。
 

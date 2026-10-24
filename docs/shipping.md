@@ -54,7 +54,10 @@ verified locally except the push and the publish themselves.
   401 without the token, and the advertised bundle URL 200. The artefacts themselves
   are unchanged — `lib/index.js` (19781 bytes) and `lib/client.js` (70144 bytes) are
   byte-for-byte what 0.3.12 shipped, which is what makes this a declaration-only
-  release.
+  release. **After publishing, re-run the same round against the registry copy**
+  (`dsh plugin --profile web add dsh-voice-call@0.3.13`): same boot, same 200s, and
+  the advertised URL came back 200 / 70215 bytes with rev `684a396a0347`. That is
+  the check that what users install is what was tested, rather than only what I built.
 - **Dependency pattern**: every `@deepseek-ai/*` package — `schemastery`
   included — is a `peerDependency` (the ecosystem convention; regular deps
   would install duplicate copies into DSH profiles and break tool dispatch),
@@ -100,7 +103,9 @@ verified locally except the push and the publish themselves.
   `resources/runtime/bin/node` and pnpm at
   `resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs` (the old
   `resources/runtime/pnpm/bin/pnpm.mjs` path is gone). `versions.json` claims pnpm
-  11.28.5; running that `pnpm.mjs --version` prints 11.23.0 — recorded, not resolved.
+  11.28.5; invoking that `pnpm.mjs --version` from a shell whose PATH holds a
+  global pnpm prints 11.23.0 instead — with the PATH scrubbed the same file
+  reports 11.28.5, and 11.28.5 is what actually installed into the profile.
   The full table lives in `docs/deployment.md` / `.en.md` under the desktop section.
 - **This machine has no global CLI** (the desktop app took over plugin
   management). Installing into the user's own profile therefore goes through the
