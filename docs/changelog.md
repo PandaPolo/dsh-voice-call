@@ -15,7 +15,7 @@
 | peerDependencies | **还是一个字没改**：`^0.1.7-rc.2 \|\| ^0.2.0-rc.1` 用宿主那个 `includePrerelease` 的 `satisfies()` 实测就含 0.2.1-rc.3（也含 0.2.2，拒绝 0.3.0-rc.1）。`schemastery` 的下界继续停在 3.18.4，因为桌面版 profile 里真实存在的那一份就是 3.18.4 |
 | 判定函数这次没动 | `evaluatePluginCompatibility` 所在的 `@deepseek-ai/dsh-app-boot/lib/index.js`，在 rc.2 与 rc.3 两份桌面 asar 里**字节相同**（203572 字节）——`requirements` 这个字段名、以及"清单写了 `engines.dsh` 就只看它"这两条语义原样保留，不需要再迁就 |
 | 声称的基线 | `SUPPORTED` = 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 / **0.2.1-rc.3**。两份依赖树各跑一遍：rc.3 一份，0.1.7-rc.2 一份（后者仍只把 `dsh-app-boot` 抬到 rc.3，因为加载判定是 0.2.0-rc.1 才有的东西） |
-| 测试 | **302 条，一条没加**——改的是那条 `engines.dsh` 守卫的力度：以前只证"写了 engines.dsh 会走另一支"，现在把"它会**沉默**"也钉上：把 `@deepseek-ai/dsh-tools` 冻回 `^0.1.7-rc.2`，没有 `engines.dsh` 时宿主就按这条 peer 拒绝，而同一份清单只要加上 `engines.dsh` 就被放行。这条负控说的正是"为什么我们故意不写 engines.dsh" |
+| 测试 | **302 条，一条没加**——改的是那条 `engines.dsh` 守卫的力度：以前只证"写了 engines.dsh 会走另一支"，现在把"它会**沉默**"也钉上：把 `@deepseek-ai/dsh-tools` 冻回 `^0.1.7-rc.2`，没有 `engines.dsh` 时宿主就按这条 peer 拒绝，而同一份清单只要加上 `engines.dsh` 就被放行。这条负控说的正是"为什么我们故意不写 engines.dsh"。CI 三平台实跑（run 40090266940，全绿）：Linux 302、Windows 302、macOS 304——多出的两条仍是只在有 `say` 的系统上才执行的集成用例；本地两份依赖树各跑一遍也都是 302 全绿 |
 | 源码 | 一行没动。三份 `tsc` 在两份树上都过，`pnpm build` 干净 |
 
 **rc.2 → rc.3 到底改了什么**（npm 侧逐包 diff，我们摸的 21 个包）：除了版本号，只有一处真代码——`@deepseek-ai/dsh-client-ui-conversation` 的**客户端**那一侧（`lib/client.js` 重构建、8 个 `.d.ts` 有改动、新增一个 `view-pins.d.ts`），而且全是**加导出**（`ConversationViewActionEntry`、`ConversationViewActionsOwnerProps`），删掉的东西为零。`@deepseek-ai/dsh-api-session-controller` 只动了一个 `.d.ts`。其余 19 个包连文件列表都没变。我们 import 的三个符号（`ConversationLocation` / `ConversationNodeContext` / `ConversationNodeDefinition`）不在差异里，三份 `tsc` 在 rc.3 上一遍过——所以这次不是"迁移"，是"确认没东西要迁"。
