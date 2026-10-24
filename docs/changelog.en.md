@@ -6,6 +6,45 @@
 >
 > 中文版：[changelog.md](changelog.md)
 
+## What changed in 0.3.13 — the baseline follows 0.2.1-rc.3, the consumer simulation is runnable again, and the host turned out to have changed how plugin bundles are fetched
+
+**Nothing in this release is a code change**: the shipped `lib/index.js` (19781 bytes) and `lib/client.js` (70144 bytes) are **byte-identical** to the ones 0.3.12 published. What moved is the declared baseline, the devDependencies, the strength of one test, and the facts in the docs that got re-measured.
+
+This time the desktop app and npm moved **together**: `dsh/desktop-runtime.json → release.version` inside the asar is **0.2.1-rc.3** (npm's `next` agrees, `latest` is still 0.2.1-rc.2; rc.3 was published 2026-10-23T07:54Z). The standing rule applies — **the desktop build decides**.
+
+| Item | Change |
+|---|---|
+| devDependencies / CI | All 22 `@deepseek-ai/dsh-*` pins raised 0.2.1-rc.2 → **0.2.1-rc.3**. cordis stays `~4.0.5` and schemastery stays `^3.18.4` — neither moved in the rc.3 train (the app still ships cordis 4.0.5 / schemastery 3.18.5 / cosmokit 1.8.6). 71 `minimumReleaseAgeExclude` rows in `pnpm-workspace.yaml` each gained `\|\| 0.2.1-rc.3`; the threshold itself was untouched |
+| peerDependencies | **Still not one character**: the host's own `includePrerelease` `satisfies()` says `^0.1.7-rc.2 \|\| ^0.2.0-rc.1` already covers 0.2.1-rc.3 (and 0.2.2, while refusing 0.3.0-rc.1). The `schemastery` floor stays at 3.18.4 because that is the copy that genuinely exists in the desktop profile |
+| The gate did not move this time | `@deepseek-ai/dsh-app-boot/lib/index.js` — the file holding `evaluatePluginCompatibility` — is **byte-identical** between the rc.2 and rc.3 desktop asars (203572 bytes). The `requirements` field name and the "`engines.dsh` decides alone" rule carried over unchanged, so nothing had to be migrated |
+| Claimed baselines | `SUPPORTED` = 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 / **0.2.1-rc.3**, each run through its own dependency tree: the rc.3 install, and a 0.1.7-rc.2 install (again with only `dsh-app-boot` raised, since the load decision was born in 0.2.0-rc.1) |
+| Tests | **302, none added** — what changed is how hard the `engines.dsh` guard bites. It used to prove only that a manifest with `engines.dsh` is judged on that range alone; it now also proves that `engines.dsh` **silences** a peer: freeze `@deepseek-ai/dsh-tools` back at `^0.1.7-rc.2` and the host refuses the manifest on that peer, while the very same manifest plus an `engines.dsh` is waved through. That negative control is the argument for not declaring one |
+| Source | Not one line. Three `tsc` passes clean on both trees; `pnpm build` clean |
+
+**What rc.2 → rc.3 actually changed** (per-package diff over the 21 packages npm publishes that we touch): one real code change, and it is entirely on the **client** side of `@deepseek-ai/dsh-client-ui-conversation` — `lib/client.js` rebuilt, 8 `.d.ts` files edited, one new `view-pins.d.ts` — and every delta is an **added export** (`ConversationViewActionEntry`, `ConversationViewActionsOwnerProps`), nothing removed. `@deepseek-ai/dsh-api-session-controller` moved a single `.d.ts`. The other 19 packages did not even change their file list. None of the three symbols we import (`ConversationLocation`, `ConversationNodeContext`, `ConversationNodeDefinition`) sits in that delta, and the three `tsc` passes went through on rc.3 untouched — so this release is not a migration, it is the confirmation that there was nothing to migrate.
+
+**The per-file hash comparison was run again** (the app's index is 17141 `path → sha256` entries now, 120 fewer than last version), against a plain `npm install @deepseek-ai/dsh@0.2.1-rc.3`:
+
+- Across the 24 packages we declare, **292 files are byte-identical**; server-side JS is still exactly the same on both sides.
+- Of the 355 npm files the desktop build strips, 349 are `.d.ts` and 4 are docs. Only 2 are runtime files — and both belong to `@deepseek-ai/dsh-client-ui-slots`, **a package the desktop runtime does not carry at all** (it did not carry it in rc.2 either). It is a devDependency, not a peer, and `src/` never imports it, so the host cannot skip us over it; it does say something worth keeping in mind: a devDependency can be a package the host never ships, so never treat that list as a runtime need.
+- 6 content differences: 4 rewritten `package.json` files (`scripts` removed) plus the rebuilt `lib/client.js` of `dsh-client-ui-chat` and `dsh-client-ui-conversation` (159 and 54 bytes apart). Still unreachable for us, for the same reason as last release — our client uses relative URLs and its own class names, and the inject target `dsh-client-ui-settings` ships a byte-identical `client.js`.
+- **The fourth difference kind from 0.3.12 is gone**: that build carried an extra `lib/types/invariant.js` in several packages; rc.3's packing stopped shipping it, so the two distributions agree on that point now.
+- 9 files exist only on desktop: `dsh-host-webserver` embeds a whole `node_modules/negotiator/`, which npm resolves by hoisting instead.
+- **The desktop profile's two-schemastery condition still holds**: its tree resolves `schemastery@3.18.4` + `cosmokit@1.8.5` while the host runs the asar's 3.18.5 / 1.8.6. So the `^3.18.4` peer floor still must not be raised.
+- All 20 declared peers exist among the app's 305 shared packages and every range admits the version it finds there (checked one by one with `satisfies()`).
+
+**The consumer simulation is back in full, and goes deeper than last release.** This machine still has no global CLI, but the harness home moves entirely with `$DSH_HOME`, so a real round was completed: `npm i @deepseek-ai/dsh@0.2.1-rc.3` → `dsh plugin --profile web add <tarball>` → boot. In order:
+
+- **No** `skipping profile bundle "dsh-voice-call"` line — rc.3's gate let us in.
+- `--dump-config` shows our entry carrying `callMode: card`, `durableEvents: false`, `audioDir: ~/.dsh/voice`, so the bundle's patch layer really does outrank `.default()`.
+- Read endpoints all 200: `/voice/call/state` answered `{"calls":[],"appearance":{…,"tone":"classic"}}` and `/voice/provision/state` answered `phase: unprepared` / `variantId: win-cpu` — values from that scratch profile, nothing written into `~/.dsh`; `GET /` on the same port stayed 401; the headless profile stopped at `MISSING_CREDENTIAL`.
+- **A new fact worth its own bullet**: on rc.3 the host fetches a plugin bundle **only with `&rev=`**. The boot manifest advertises `plugins/??dsh-voice-call/client.js&rev=ece8910da42d`; fetching exactly that returns **200, 70215 bytes, `text/javascript`**, with our class names and all `/voice/*` paths inside. Fetching `plugins/??dsh-voice-call/client.js` without the rev returns **404**. The reason is `@deepseek-ai/dsh-client-modules`' `bundleResource()`: it looks up `pathname + search` in a pre-built table. Our manifest never hardcodes that URL — the host composes it — so the plugin is unaffected, but the line "one GET and it is 200" in our docs is no longer true and has been corrected.
+- The app also rearranged its runtime directory: node is now `resources/runtime/bin/node`, pnpm is `resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs`, and a new `runtime.json` next to them declares `desktopVersion: 0.2.1-rc.3` plus its own Python toolchain. `versions.json` claims pnpm 11.28.5 while running that `pnpm.mjs --version` prints 11.23.0 — recorded as observed, not resolved.
+
+**Still untested this round**: the desktop app was not running (no `DeepSeek Harness.exe` in the process list), so there is no rc.3 desktop live probe. The four things that only count when a human sees them — the settings card rendering inside Electron, the ringtone actually sounding, an accepted call playing the whole sentence, the provisioning bar streaming — still need one click each. After updating, reload the plugin or restart the app; nothing hot-reloads.
+
+**Anyone already installed**: 0.3.12 already loads on 0.2.1-rc.3, because no peer range changed. Updating now hands you the same bytes as 0.3.12 — this is a pure baseline-declaration release.
+
 ## What changed in 0.3.12 — the baseline follows 0.2.1-rc.2, and the desktop copy was hash-compared with the npm one
 
 **The question this release answers is not "does our code run on the new version" but "is the desktop app's 0.2.1-rc.2 the same thing as npm's".** The app is ahead of npm again: its `release.version` is **0.2.1-rc.2** while npm's `latest` is still 0.2.0-rc.2 (`next` points at 0.2.1-rc.2). Most people install plugins through the app, so this release follows the rule that came out of that: **the desktop build decides**.

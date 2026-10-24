@@ -3,6 +3,45 @@
 > 从 [README](../README.md) 搬出来的发版账本。首页只留"最新版一句话"，这里按版本倒序保留全文。
 > 每个版本的发布说明在 [GitHub Releases](https://github.com/PandaPolo/dsh-voice-call/releases) 也有一份。
 
+## 0.3.13 —— 基线跟上 0.2.1-rc.3；消费侧模拟重新做得起来了，顺带发现宿主换了插件 bundle 的取法
+
+**这一版没有任何代码变化**：发出去的 `lib/index.js`（19781 字节）与 `lib/client.js`（70144 字节）和 0.3.12 那两份**字节相同**。变的只有声明的基线、devDependencies、一条测试的强度，以及文档里被重新测过的那些事实。
+
+桌面版和 npm 这次**同时**动了：asar 里 `dsh/desktop-runtime.json → release.version` 是 **0.2.1-rc.3**（npm `next` 同号，`latest` 留在 0.2.1-rc.2；rc.3 发布于 2026-10-23T07:54Z）。规矩照旧——**以桌面版为准**。
+
+| 项目 | 改动 |
+|---|---|
+| devDependencies / CI | 22 个 `@deepseek-ai/dsh-*` pin 从 0.2.1-rc.2 抬到 **0.2.1-rc.3**。cordis 继续 `~4.0.5`、schemastery 继续 `^3.18.4`——这两位在 rc.3 那批里根本没动（桌面版带的仍是 cordis 4.0.5 / schemastery 3.18.5 / cosmokit 1.8.6）。`pnpm-workspace.yaml` 里 71 条 `minimumReleaseAgeExclude` 各加上 `\|\| 0.2.1-rc.3`，阈值本身没动 |
+| peerDependencies | **还是一个字没改**：`^0.1.7-rc.2 \|\| ^0.2.0-rc.1` 用宿主那个 `includePrerelease` 的 `satisfies()` 实测就含 0.2.1-rc.3（也含 0.2.2，拒绝 0.3.0-rc.1）。`schemastery` 的下界继续停在 3.18.4，因为桌面版 profile 里真实存在的那一份就是 3.18.4 |
+| 判定函数这次没动 | `evaluatePluginCompatibility` 所在的 `@deepseek-ai/dsh-app-boot/lib/index.js`，在 rc.2 与 rc.3 两份桌面 asar 里**字节相同**（203572 字节）——`requirements` 这个字段名、以及"清单写了 `engines.dsh` 就只看它"这两条语义原样保留，不需要再迁就 |
+| 声称的基线 | `SUPPORTED` = 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 / **0.2.1-rc.3**。两份依赖树各跑一遍：rc.3 一份，0.1.7-rc.2 一份（后者仍只把 `dsh-app-boot` 抬到 rc.3，因为加载判定是 0.2.0-rc.1 才有的东西） |
+| 测试 | **302 条，一条没加**——改的是那条 `engines.dsh` 守卫的力度：以前只证"写了 engines.dsh 会走另一支"，现在把"它会**沉默**"也钉上：把 `@deepseek-ai/dsh-tools` 冻回 `^0.1.7-rc.2`，没有 `engines.dsh` 时宿主就按这条 peer 拒绝，而同一份清单只要加上 `engines.dsh` 就被放行。这条负控说的正是"为什么我们故意不写 engines.dsh" |
+| 源码 | 一行没动。三份 `tsc` 在两份树上都过，`pnpm build` 干净 |
+
+**rc.2 → rc.3 到底改了什么**（npm 侧逐包 diff，我们摸的 21 个包）：除了版本号，只有一处真代码——`@deepseek-ai/dsh-client-ui-conversation` 的**客户端**那一侧（`lib/client.js` 重构建、8 个 `.d.ts` 有改动、新增一个 `view-pins.d.ts`），而且全是**加导出**（`ConversationViewActionEntry`、`ConversationViewActionsOwnerProps`），删掉的东西为零。`@deepseek-ai/dsh-api-session-controller` 只动了一个 `.d.ts`。其余 19 个包连文件列表都没变。我们 import 的三个符号（`ConversationLocation` / `ConversationNodeContext` / `ConversationNodeDefinition`）不在差异里，三份 `tsc` 在 rc.3 上一遍过——所以这次不是"迁移"，是"确认没东西要迁"。
+
+**逐文件哈希又走了一遍**（桌面版这次的索引是 17141 条 `path → sha256`，比上一版少 120 条）。拿它比一份 `npm install @deepseek-ai/dsh@0.2.1-rc.3`：
+
+- 我们声明的 24 个包里，**292 个文件字节相同**；服务端 JS 依旧两边一字不差。
+- 桌面版剥掉的 355 个 npm 文件里，349 个是 `.d.ts`、4 个是文档，只有 2 个是真运行时文件——而那两个都属于 `@deepseek-ai/dsh-client-ui-slots`：**这个包桌面版运行时里整个不存在**（rc.2 那版也不存在）。它是我们的 devDependency 而不是 peer，`src/` 一行都没 import，所以宿主不会因此跳过我们；但它说明 devDeps 里可以放宿主根本不发的包，别把它当成运行时依赖看。
+- 6 处内容不同：4 份 `package.json`（被删掉 `scripts`）加 `dsh-client-ui-chat` / `dsh-client-ui-conversation` 两份 `lib/client.js`（另一次构建，字节数差 159 与 54）。碰不到我们——理由和上一版相同：客户端只用相对路径和自己的类名，注入目标 `dsh-client-ui-settings` 的 `client.js` 两边字节相同。
+- **0.3.12 记下的第四类差异消失了**：那一版桌面版若干包多带一份 `lib/types/invariant.js`，rc.3 的打包不再带它，两份发行物在这一点上对齐了。
+- 桌面版独有 9 个文件：`dsh-host-webserver` 里嵌了一整棵 `node_modules/negotiator/`，npm 那份靠 hoist 解析。
+- **桌面 profile 那份"同进程两个 schemastery"依旧成立**：profile 树里还是 `schemastery@3.18.4` + `cosmokit@1.8.5`，宿主跑 asar 里的 3.18.5 / 1.8.6。所以 peer 下界 `^3.18.4` 仍然不能抬。
+- 20 条 peer 在桌面版那 305 个共享包里**全部存在且区间全部放行**（逐条 `satisfies()` 核过）。
+
+**消费侧模拟恢复了完整形态，而且比上一版走得更深。** 这台机器仍然没有全局 CLI，但 harness home 可以用 `$DSH_HOME` 整个挪进临时目录——于是一轮真的做完了：`npm i @deepseek-ai/dsh@0.2.1-rc.3` → `dsh plugin --profile web add <tarball>` → boot。看到的依次是：
+
+- **没有** `skipping profile bundle "dsh-voice-call"` 那一行——rc.3 的判定把我们放进来了。
+- `--dump-config` 里我们的条目带着 `callMode: card`、`durableEvents: false`、`audioDir: ~/.dsh/voice`——bundle 的 patch 层确实排在 `.default()` 之上。
+- 只读端点全 200：`/voice/call/state` 回了 `{"calls":[],"appearance":{…,"tone":"classic"}}`，`/voice/provision/state` 回了 `phase: unprepared` / `variantId: win-cpu`（都是这份 scratch profile 自己的值，没碰 `~/.dsh`）；同端口 `GET /` 仍是 401；headless profile 只停在 `MISSING_CREDENTIAL`。
+- **一条新事实，值得单独记**：rc.3 的宿主把插件 bundle 的取法改成**必须带 `&rev=`**。boot manifest 广告的是 `plugins/??dsh-voice-call/client.js&rev=ece8910da42d`，按它取 → **200、70215 字节、`text/javascript`**，内容里能看到我们的类名与全部 `/voice/*` 路径；不带 rev 直接打 `plugins/??dsh-voice-call/client.js` → **404**。原因在 `@deepseek-ai/dsh-client-modules` 的 `bundleResource()`：它拿 `pathname + search` 去精确查一张预生成的表。我们自己的清单从不写死这个 URL（组合由宿主负责），所以插件不受影响——但文档里"打一次就是 200"那句从此不再成立，已经改掉。
+- 桌面版这一版还换了 runtime 目录：node 现在在 `resources/runtime/bin/node`，pnpm 在 `resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs`，旁边多一份 `runtime.json` 写着 `desktopVersion: 0.2.1-rc.3` 和自带 python 工具链。`versions.json` 说 pnpm 是 11.28.5，但直接跑那份 `pnpm.mjs --version` 报 11.23.0——这条照实记下，没下定论。
+
+**这轮仍然没测到的**：桌面版此刻没在运行（进程列表里没有 `DeepSeek Harness.exe`），所以 0.2.1-rc.3 上的桌面 live probe 没做；设置卡渲染、铃声响起、接听后播完整句、装配进度条流式这四件事，还是得在真界面点一次才算数。更完版本记得重载插件或重启桌面版——插件不热加载。
+
+**已经装着的用户**：0.3.12 在 0.2.1-rc.3 上本来就加载得进来（peer 一个字没改），所以这版更不更都不影响能不能用。真要更，拿到的字节和 0.3.12 完全一样——这是一次纯基线声明的更新。
+
 ## 0.3.12 —— 基线跟上 0.2.1-rc.2，并把"桌面版那份"和"npm 那份"逐文件对过
 
 **这次要回答的不是"我们的代码在新版本上跑不跑"，而是"桌面版和 npm 装的同一个版本号，是不是同一份东西"。** 桌面版又一次跑在了 npm 前面：它的 `release.version` 已经是 **0.2.1-rc.2**，而 npm 的 `latest` 还停在 0.2.0-rc.2（`next` 才指到 0.2.1-rc.2）。绝大多数用户是在桌面版上装插件的，所以按这一版定下的规矩：**以桌面版为准**。

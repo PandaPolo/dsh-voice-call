@@ -25,6 +25,10 @@
  * result structure rather than a logged string: the report field is
  * `requirements` (it was `peers`), and an own `engines.dsh` now takes over the
  * whole decision — peers are then ignored. The last case here pins both.
+ * 0.2.1-rc.3 did not move the gate at all: `@deepseek-ai/dsh-app-boot`'s
+ * `lib/index.js` is byte-for-byte the file the rc.2 desktop build shipped
+ * (verified against the sha256 index in the app's own `dsh/desktop-runtime.json`),
+ * so only its version string changed.
  */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -33,12 +37,12 @@ import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot';
 
 /**
  * Harness releases this plugin claims to run on. Add a line here when claiming
- * one. `0.2.1-rc.2` is what the desktop app (`@deepseek-ai/dsh-desktop`) ships as
+ * one. `0.2.1-rc.3` is what the desktop app (`@deepseek-ai/dsh-desktop`) ships as
  * its bundled runtime today, and npm's `next` tag points at the same version
- * while `latest` is still 0.2.0-rc.2 — so this list is checked by both
+ * while `latest` is still 0.2.1-rc.2 — so this list is checked by both
  * distributions, and the desktop one is the one that moves first.
  */
-const SUPPORTED = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2'];
+const SUPPORTED = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3'];
 
 type Manifest = {
   name: string;
@@ -129,10 +133,23 @@ describe('harness compatibility declaration', () => {
     // And the shape is proven: a manifest that does carry it is judged alone.
     const withEngine = {
       ...manifest,
-      engines: { ...manifest.engines, dsh: '^0.2.1-rc.2' },
+      engines: { ...manifest.engines, dsh: '^0.2.1-rc.3' },
     };
-    assert.equal(refused(withEngine, '0.2.1-rc.2'), undefined);
+    assert.equal(refused(withEngine, '0.2.1-rc.3'), undefined);
     assert.deepEqual(Object.keys(refused(withEngine, '0.1.7-rc.2')?.requirements ?? {}), ['engines.dsh']);
+    // Silencing is not hypothetical: one peer frozen at the old train, and the
+    // engine range still waves the release through. The same manifest without
+    // `engines.dsh` is refused by that very peer.
+    const stalePeer = {
+      ...manifest,
+      peerDependencies: { ...manifest.peerDependencies, '@deepseek-ai/dsh-tools': '^0.1.7-rc.2' },
+    };
+    assert.deepEqual(
+      Object.keys(refused(stalePeer, '0.2.1-rc.3')?.requirements ?? {}),
+      ['@deepseek-ai/dsh-tools'],
+      'peers are what the gate reads while we declare no engines.dsh',
+    );
+    assert.equal(refused({ ...stalePeer, engines: { dsh: '^0.2.1-rc.3' } }, '0.2.1-rc.3'), undefined);
   });
 
   it('keeps every gated devDependency inside the claimed baselines', () => {
