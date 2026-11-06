@@ -30,6 +30,8 @@
 
 **和 0.3.12 / 0.3.13 比，这一版同样没有 bug 可修**：缝隙还在原处（`webServer.register` 的 disposer 由 `src/web-mount.ts` 接管、判定链两种走法都有人看着）。它多证明的是"判定链变了 22 KB 之后仍然不含我们"，以及"我们编译用的地板不是宿主跑的版本"这件事可以被测，而不是被推断。
 
+**这一版真正跑完的路**：CI run 42194346943（commit `34b4568`）三平台全绿——Linux 302、Windows 302、macOS 304（多出的两条仍是只在有 `say` 的系统上执行的集成用例）。npm 上 `latest` 已指向 **0.3.14**（shasum `0417de396a27…`，清单里 20 条 peer、没有 `dependencies` 块、`engines` 只有 `node>=20`）；GitHub Release 打在同一个 commit 上。**发布后拿注册表里那份又跑了一遍同一轮模拟**：`dsh plugin --profile web add dsh-voice-call@0.3.14` → 广告 URL 这次是 `rev=a76377041660`，200 / 70215 字节，`&rev=` 去掉仍 404，三个只读端点仍 200，`skipping profile bundle` 仍是 0 次。本机桌面 profile 也已用 app 自带的那份 node 24.21.0 + pnpm 更到 0.3.14（`package.json.pre-0.3.14.bak` / `pnpm-lock.yaml.pre-0.3.14.bak` 各留一份；安装打印 "Done in 4s using pnpm v11.28.5"；**没有撞发布龄期**——profile 那份豁免是按**包名**写的 `dsh-voice-call`，新版本自动在里面）。
+
 **已经装着的用户**：0.3.13 在 0.2.2-rc.1 上本来就加载得进来（peer 范围没变、判定链没变），所以更不更这一版都不影响能不能用；更的话照旧——**插件不热加载**，重载或重启桌面版才算。另外，设置卡渲染、铃声响起、接听后播完整句、装配进度条流式这四件事仍只能在真界面里点一次验收，我们没法替。
 
 

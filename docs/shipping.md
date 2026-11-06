@@ -65,7 +65,23 @@ verified locally except the push and the publish themselves.
   "version-string release" situation. **After publishing, re-run the same round against
   the registry copy** (`dsh plugin --profile web add dsh-voice-call@0.3.14`): that is
   the check that what users install is what was tested, rather than only what I built —
-  for 0.3.13 it came back 200 / 70215 bytes with rev `684a396a0347`.
+  for 0.3.13 it came back 200 / 70215 bytes with rev `684a396a0347`, and for 0.3.14
+  with rev `a76377041660`.
+- **Desktop profile update (the user's own install)**: the reliable way to move
+  `~/.dsh/profiles/desktop` without the GUI is the app's *own* toolchain —
+  `resources/runtime/primary-runtime/dependencies/node/bin/node.exe` running
+  `…/dependencies/pnpm/bin/pnpm.mjs add dsh-voice-call@<version>` inside the profile
+  directory, with `package.json` and `pnpm-lock.yaml` backed up first
+  (`.pre-<version>.bak`). Run that way on 2026-11-06 for 0.3.14: node v24.21.0,
+  "Lockfile passes supply-chain policies (190 entries)", `Done in 4s using pnpm
+  v11.28.5`, and **no `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`** — the profile's
+  `minimumReleaseAgeExclude` names `dsh-voice-call` at *package-name* level, so a new
+  version of an already-installed plugin is exempt by name. Two notes on what that
+  output means: `pnpm.mjs --version` invoked directly prints **11.23.0** when the
+  calling shell has a global pnpm on `PATH`, while the same file reports 11.28.5 for
+  the install itself (the app's `bin/node` wrapper prepends its own `bin` to `PATH`);
+  and `--config.minimum-release-age=0` was not needed, so do not add it reflexively —
+  it silences the very check that tells you a *new* package name is being blocked.
 - **Dependency pattern**: every `@deepseek-ai/*` package — `schemastery`
   included — is a `peerDependency` (the ecosystem convention; regular deps
   would install duplicate copies into DSH profiles and break tool dispatch),
