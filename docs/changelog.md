@@ -3,6 +3,37 @@
 > 从 [README](../README.md) 搬出来的发版账本。首页只留"最新版一句话"，这里按版本倒序保留全文。
 > 每个版本的发布说明在 [GitHub Releases](https://github.com/PandaPolo/dsh-voice-call/releases) 也有一份。
 
+## 0.3.14 —— 基线跟上 0.2.2-rc.1：这一轮 harness 真的动了代码，我们的产物还是那两份字节
+
+**先说这版和上一版的区别**：0.3.13 那轮是"版本号变了、东西没变"；0.2.2-rc.1 这轮**相反**——harness 自己动了代码，而我们发出去的 `lib/index.js`（19781 字节）与 `lib/client.js`（70144 字节）**仍然是 0.3.13 那两份字节**（拿 npm 上 0.3.13 的 tarball 回算 sha256 对过：`2b574024d299912b` / `013d826721773dc5`，一字不差）。
+
+这一轮还有一件这个项目历史上头一次的事：**桌面版与 npm 同版**。asar 里 `dsh/desktop-runtime.json → release.version` = **0.2.2-rc.1**（2026-11-04T09:20Z 发布），npm 的 `latest` 与 `next` 都指到它。"以桌面版为准"这条规矩这轮没什么可裁决的——两边给的是同一版。
+
+| 项目 | 改动 |
+|---|---|
+| devDependencies / CI | 22 个 `@deepseek-ai/dsh-*` pin 从 0.2.1-rc.3 抬到 **0.2.2-rc.1**；`@deepseek-ai/cordis` 从 `~4.0.5` 抬到 **`~4.1.0`**——桌面运行时那份现在是 cordis 4.1.0 / schemastery 3.19.0 / cosmokit 1.9.0（rc.3 那轮是 4.0.5 / 3.18.5 / 1.8.6）。`pnpm-workspace.yaml` 里 70 条 `minimumReleaseAgeExclude` 各加上 `\|\| 0.2.2-rc.1`，阈值本身没动；lockfile 重装后重生成 |
+| peerDependencies | **一个字没改**：`^0.1.7-rc.2 \|\| ^0.2.0-rc.1` 本来就含 0.2.2-rc.1。`@deepseek-ai/schemastery` 继续 `^3.18.4`——桌面 profile 里真实存在的那份还是 3.18.4，而宿主跑的是 3.19.0，地板不能抬 |
+| harness 这轮动了什么 | 24 个 harness 包里 **15 个的服务端 JS 变了**：`dsh-app-boot/lib/index.js` 203572 → **225678** 字节；每个包新增 `locale/{de,es,fr,ja,pt,ru}.json`；`dsh-tools` 的 `lib/types/` 重排（`ptc`/`ptc-calls`/`py-types`/`ts-types`/`testing`/`types` 六个文件删除，`contracts`/`executor`/`pipeline`/`batch`/`events` 加 `lib/pipeline.js`、`lib/shared-DTdn5dXO.js` 顶上）；`dsh-api-session-controller` 把 history / state / web 拆成 controller+listener（新增 12 个文件、删 `model-selection-projection.js`）。**没动的六个**：`dsh-credentials`、`dsh-home-paths`、`dsh-jobs`、`dsh-launch-environment`、`dsh-shell`、`dsh-client-ui-slots`——只有 `package.json` 的版本号 |
+| 加载判定 | **判定链逐字节没动**：`evaluatePluginCompatibility`（630 字节）、`unmetRequirements`（1033 字节）、`satisfies`（147 字节）从 rc.3 与 0.2.2-rc.1 两份桌面 asar 里按大括号配对抠出来对比，全部相同；`engines` 出现次数也一样（各 9 处）。变胖的是别的东西（profile 模板常量搬家 + locale）。上一轮那条"`engines.dsh` 会让 peer 判定闭嘴"的负控继续有效 |
+| 源码 | **一行没动**。迁移面按符号逐个查过（`defineTool`、`GenericCallView`、`SessionEventLike`、`MessageId`、`JobOutcome`、`credentialRef`、`launchEnvironmentOf`、`expandHomePath`…），三份 `/client` 子路径的 exports 映射也逐个对过——都在原地。三份 `tsc` 全过，客户端 bundle 仍 70144 字节 |
+| 测试 | 302 条，**三份依赖树各跑一遍全绿**：① 0.2.2-rc.1 新树；② 0.1.7-rc.2 旧树（只把 `dsh-app-boot` 抬到 0.2.2-rc.1，因为加载判定本身是 0.2.0-rc.1 才存在的东西）；③ 0.2.2-rc.1 + **schemastery 钉在 3.19.0**——也就是宿主真正执行的那一份（前两棵树里 pnpm 都解析到 3.18.4 这块地板）。`test/harness-compat.test.ts` 的 `SUPPORTED` 加到六条，头部注释记下"判定链在两份 asar 里逐字节相同"这件事是怎么证的 |
+| 声称的基线 | 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 / 0.2.1-rc.3 / **0.2.2-rc.1**。中间那几个已发布但我们没跑过的（`0.2.1-rc.4`、`0.2.1-rc.5`、`0.2.2-alpha.2/3`）不进 `SUPPORTED`——范围含它们，但我们不声称没跑过的东西 |
+
+**桌面版逐文件哈希（同一套方法，第四次）**：先回算 `dsh-app-boot/lib/index.js` 与 `desktop-runtime.json` 自己的 sha256，两处都对得上 app.asar 头部声明的 integrity——索引可信，再拿它比 24 个 harness 包的发布物，另外单独比了 cordis 4.1.0 / schemastery 3.19.0 / cosmokit 1.9.0：
+
+- **400 个文件一字不差**（服务端 JS 160、locale 128、文档 92、`package.json` 19、其他 1），三份支持包再加 31 个、内容差异 0。rc.3 那轮是 292——涨的主要是新出现的 locale 文件，两侧一致。
+- 内容差异仍只有 **6 个**：4 个 `package.json`（`scripts` 被删）+ `dsh-client-ui-chat` / `dsh-client-ui-conversation` 的 `lib/client.js`（**另一次构建**，分别差 158 与 7 字节）。桌面版剥掉 371 个文件：365 个类型文件 + 4 个文档 + 2 个既非类型也非文档的——那两个正好是 `dsh-client-ui-slots` 的 `lib/index.js` 与 `package.json`，也就是"桌面版运行时根本不带 slots"这条的老结论，第三轮仍然成立。桌面版自己多带 9 个文件：`dsh-host-webserver` 里那棵 `node_modules/negotiator/`。
+- **`dsh-client-ui-settings` 这一版两头都没动**：桌面 vs npm 只有 `package.json` 差 `scripts`，`client.js` 字节相同；npm 侧 rc.3 → 0.2.2-rc.1 也没碰它的任何服务端 JS。我们三张卡都靠它注入，这条单独记下来。
+- **索引规模换了量级**：17261（rc.2）→ 17141（rc.3）→ **21046**；`sharedPackages` 304 → 305 → **329**。
+
+**消费侧模拟（`$DSH_HOME`，不碰真 `~/.dsh`）**：`npm i @deepseek-ai/dsh@0.2.2-rc.1` → `dsh plugin --profile web add dsh-voice-call-0.3.14.tgz` → boot。**没有一行 `skipping profile bundle`**；`--dump-config` 里我们的条目带 `callMode: card` / `durableEvents: false`；`/voice/call/state`、`/voice/provision/state`、`/voice/provision/disk` 三个只读端点全 200（scratch home 是空的，所以 `tone: classic`、`phase: unprepared`、`variantId: win-cpu`，都是默认值）；`GET /` 仍 401；bundle 按广告 URL `plugins/??dsh-voice-call/client.js&rev=c8e6687c0aa0` 取到 **200 / 70215 字节 / text/javascript**，把 `&rev=` 去掉就 404——rc.3 发现的那条取法在 0.2.2-rc.1 仍然成立。
+
+**和 0.3.12 / 0.3.13 比，这一版同样没有 bug 可修**：缝隙还在原处（`webServer.register` 的 disposer 由 `src/web-mount.ts` 接管、判定链两种走法都有人看着）。它多证明的是"判定链变了 22 KB 之后仍然不含我们"，以及"我们编译用的地板不是宿主跑的版本"这件事可以被测，而不是被推断。
+
+**已经装着的用户**：0.3.13 在 0.2.2-rc.1 上本来就加载得进来（peer 范围没变、判定链没变），所以更不更这一版都不影响能不能用；更的话照旧——**插件不热加载**，重载或重启桌面版才算。另外，设置卡渲染、铃声响起、接听后播完整句、装配进度条流式这四件事仍只能在真界面里点一次验收，我们没法替。
+
+
+
 ## 0.3.13 —— 基线跟上 0.2.1-rc.3；消费侧模拟重新做得起来了，顺带发现宿主换了插件 bundle 的取法
 
 **这一版没有任何代码变化**：发出去的 `lib/index.js`（19781 字节）与 `lib/client.js`（70144 字节）和 0.3.12 那两份**字节相同**。变的只有声明的基线、devDependencies、一条测试的强度，以及文档里被重新测过的那些事实。

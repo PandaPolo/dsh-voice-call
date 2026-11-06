@@ -35,7 +35,7 @@ verified locally except the push and the publish themselves.
   `dsh-voice-call` with its patch layer visible (`callMode: card`,
   `durableEvents: false`), the read endpoints answer 200, and the client bundle
   is served over the URL the boot manifest advertises — **which since 0.2.1-rc.3
-  carries a revision**: `plugins/??dsh-voice-call/client.js&rev=<hash>` returns
+  carries a revision, and still does at 0.2.2-rc.1**: `plugins/??dsh-voice-call/client.js&rev=<hash>` returns
   200 / 70215 bytes of `text/javascript` containing our class names and every
   `/voice/*` path, while the same path **without `&rev=` returns 404**
   (`@deepseek-ai/dsh-client-modules`' `bundleResource()` matches `pathname +
@@ -45,19 +45,27 @@ verified locally except the push and the publish themselves.
   assuming the old path.
   **Both simulations need a `dsh` CLI.** 0.3.12 could not run them (the global CLI
   had been retired) and settled for a live probe of the running desktop app, which
-  proves activation but not the *packed* artefact. For 0.3.13 they are back, without
-  reinstalling anything globally: `npm i @deepseek-ai/dsh@0.2.1-rc.3` into a scratch
+  proves activation but not the *packed* artefact. Since 0.3.13 they run without
+  reinstalling anything globally: `npm i @deepseek-ai/dsh@<baseline>` into a scratch
   directory, then `node node_modules/@deepseek-ai/dsh/lib/bin.js …` with **`DSH_HOME`
   pointed at a scratch home**, so no profile, cache or `cordis.yml` under the user's
-  real `~/.dsh` is touched. Verified that way on 2026-10-24: no `skipping profile
-  bundle` line, `/voice/call/state` and `/voice/provision/state` both 200, `GET /`
-  401 without the token, and the advertised bundle URL 200. The artefacts themselves
-  are unchanged — `lib/index.js` (19781 bytes) and `lib/client.js` (70144 bytes) are
-  byte-for-byte what 0.3.12 shipped, which is what makes this a declaration-only
-  release. **After publishing, re-run the same round against the registry copy**
-  (`dsh plugin --profile web add dsh-voice-call@0.3.13`): same boot, same 200s, and
-  the advertised URL came back 200 / 70215 bytes with rev `684a396a0347`. That is
-  the check that what users install is what was tested, rather than only what I built.
+  real `~/.dsh` is touched. Verified that way on 2026-10-24 (0.2.1-rc.3) and again on
+  2026-11-06 (0.2.2-rc.1 + the packed 0.3.14): no `skipping profile
+  bundle` line, `/voice/call/state`, `/voice/provision/state` and `/voice/provision/disk` all
+  200, `GET /` 401 without the token, and the advertised bundle URL 200 / 70215 bytes
+  (`rev=c8e6687c0aa0` this round) — 404 once the query is stripped.
+  Two details worth keeping straight when reading those numbers: an empty scratch home
+  reports *defaults*, not the user's state (`tone: classic`, `phase: unprepared`,
+  `variantId: win-cpu`), so those values are not a regression signal; and `--dump-config`
+  is only accepted without `--no-open` on that command line — passing both prints
+  `error: unknown option '--dump-config'` and writes an almost empty file, which is easy
+  to misread as the plugin not composing. **The 0.3.14 artefacts are byte-identical to
+  0.3.13's** — `lib/index.js` (19781 bytes) and `lib/client.js` (70144 bytes) — even
+  though the harness moved real code this round, which is the opposite of 0.3.13's
+  "version-string release" situation. **After publishing, re-run the same round against
+  the registry copy** (`dsh plugin --profile web add dsh-voice-call@0.3.14`): that is
+  the check that what users install is what was tested, rather than only what I built —
+  for 0.3.13 it came back 200 / 70215 bytes with rev `684a396a0347`.
 - **Dependency pattern**: every `@deepseek-ai/*` package — `schemastery`
   included — is a `peerDependency` (the ecosystem convention; regular deps
   would install duplicate copies into DSH profiles and break tool dispatch),
@@ -74,38 +82,56 @@ verified locally except the push and the publish themselves.
   `requirements` (was `peers`), and an own `engines.dsh` **replaces** the peer
   check rather than adding to it — which is why the manifest deliberately does
   not carry one. 0.2.1-rc.3 did **not** move the predicate: `dsh-app-boot/lib/index.js`
-  is byte-identical (203572 bytes) between the rc.2 and rc.3 desktop asars. The
+  is byte-identical (203572 bytes) between the rc.2 and rc.3 desktop asars. **0.2.2-rc.1
+  grew that file to 225678 bytes without moving the predicate either** — the way to see
+  that is to brace-match `evaluatePluginCompatibility`, `unmetRequirements` and
+  `satisfies` out of both asars and diff the three snippets (630 / 1033 / 147 bytes,
+  identical); reading the whole bundle's diff just shows you locales and relocated
+  constants. The
   engines case now also proves the silencing is real: a manifest with one peer
   frozen at `^0.1.7-rc.2` is refused, and the same manifest plus `engines.dsh`
-  passes. A bump runs the suite twice, once per dependency tree (new baseline,
-  and 0.1.7-rc.2 with only `dsh-app-boot` raised, since the gate itself did not
-  exist before 0.2.0-rc.1) — both trees green for 0.3.13.
+  passes. A bump runs the suite once per dependency tree: new baseline, 0.1.7-rc.2
+  with only `dsh-app-boot` raised (the gate itself did not exist before 0.2.0-rc.1),
+  and — since the support packages moved this round — a third tree pinning
+  schemastery at the version the host runs, because the other two resolve the
+  3.18.4 floor. All three green (302) for 0.3.14.
 - **Desktop app**: `@deepseek-ai/dsh-desktop` bundles its own dsh runtime, and
   its version moves independently of npm (`nightly` feed on
-  `download.deepseek.com`) — as of 0.3.13 the app is on **0.2.1-rc.3**, npm's
-  `latest` is 0.2.1-rc.2 and `next` is 0.2.1-rc.3, so **the desktop build
-  decides**. On a baseline bump, read the installed `app.asar →
+  `download.deepseek.com`) — as of 0.3.14 the app is on **0.2.2-rc.1**, and npm's
+  `latest` *and* `next` point at the same version, so **the desktop build had
+  nothing to overtake this round**. That is new: until now the two were always a
+  version apart, so do not assume it next time — read both. On a baseline bump, read the installed `app.asar →
   dsh/desktop-runtime.json` (`release.version`, `sharedPackages`) — and, since
   rc.3, `resources/runtime/primary-runtime/runtime.json` (`desktopVersion`) too —
   and check that every declared peer exists there at a version the gate admits.
   Then go one step further, which is cheap because the app publishes its own
-  `path → sha256` index (17141 bundled files in rc.3, 17261 in rc.2): re-hash one
-  asar file first to trust the index, and compare that index against a scratch
-  `npm install @deepseek-ai/dsh@<version>` tree, package by package. That is how
+  `path → sha256` index (17261 files in rc.2, 17141 in rc.3, **21046** now): re-hash one
+  asar file first to trust the index, and compare that index against the published
+  tarballs, package by package — plus cordis / schemastery / cosmokit at the versions
+  listed in `sharedPackages`, which the harness-version string does not cover. That is how
   0.3.12 established that server-side JS is identical in both distributions, and
-  re-running it for 0.3.13 confirmed the conclusion while correcting two details:
-  the desktop-only `lib/types/invariant.js` is no longer packed (one difference
-  kind gone), and `@deepseek-ai/dsh-client-ui-slots` — a devDependency — is not in
-  the desktop runtime at all. The desktop profile still resolves schemastery /
-  cosmokit from its **own** copies (3.18.4 / 1.8.5) while the host runs the asar's
-  3.18.5 / 1.8.6, which is why the `^3.18.4` peer floor must stay.
-  Note the app moved its runtime layout in rc.3: node lives at
+  re-running it for 0.3.13 and again for 0.3.14 confirmed the conclusion; the
+  desktop-only `lib/types/invariant.js` difference kind went away in rc.3, and
+  `@deepseek-ai/dsh-client-ui-slots` — a devDependency — is still not in
+  the desktop runtime at all (the only two non-type, non-doc "stripped" files are
+  exactly its own). The desktop profile still resolves schemastery /
+  cosmokit from its **own** copies (3.18.4 / 1.8.5) while the host now runs the asar's
+  3.19.0 / 1.9.0, which is why the `^3.18.4` peer floor must stay — and why the
+  suite also runs against 3.19.0.
+  Note the app's runtime layout, set in rc.3: node lives at
   `resources/runtime/bin/node` and pnpm at
-  `resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs` (the old
-  `resources/runtime/pnpm/bin/pnpm.mjs` path is gone). `versions.json` claims pnpm
+  `resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs`. **0.3.14 settled
+  which copy the plugin page installs with, by reading `app.asar`**: `runDesktopCli`
+  passes `command: process.execPath` (Electron as node, `ELECTRON_RUN_AS_NODE=1`) with
+  `args: [<supportDir>/primary-runtime/dependencies/pnpm/bin/pnpm.mjs]` and prepends
+  `<supportDir>/bin` to `PATH`, where `supportDir` is the `runtime` directory next to
+  `app.asar`. `~/.dsh/dsh-runtimes/dsh-primary-runtime` is a *different* thing — the
+  **office** plugin's materialised payload (`root: join(resolveDshHome(), "dsh-runtimes",
+  "dsh-primary-runtime")`, `source:` that same `primary-runtime`), and on this machine it
+  is still the October 1 copy (desktopVersion 0.2.0-rc.2, pnpm 11.7.0). `versions.json` claims pnpm
   11.28.5; invoking that `pnpm.mjs --version` from a shell whose PATH holds a
   global pnpm prints 11.23.0 instead — with the PATH scrubbed the same file
-  reports 11.28.5, and 11.28.5 is what actually installed into the profile.
+  reports 11.28.5, which is exactly what the app's own `PATH` prefixing avoids.
   The full table lives in `docs/deployment.md` / `.en.md` under the desktop section.
 - **This machine has no global CLI** (the desktop app took over plugin
   management). Installing into the user's own profile therefore goes through the
@@ -114,7 +140,7 @@ verified locally except the push and the publish themselves.
   touching a global install: `npm i @deepseek-ai/dsh@<version>` into a scratch
   directory and call `node node_modules/@deepseek-ai/dsh/lib/bin.js`, with
   **`DSH_HOME` set to a scratch home** so no real profile, cache or `cordis.yml`
-  is written. That is how the 0.3.13 consumer simulation ran, and it is the
+  is written. That is how the 0.3.13 and 0.3.14 consumer simulations ran, and it is the
   cheaper route whenever `dsh … --dump-config` or a live boot is what the check
   needs.
 

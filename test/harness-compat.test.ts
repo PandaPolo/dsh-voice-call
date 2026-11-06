@@ -29,6 +29,13 @@
  * `lib/index.js` is byte-for-byte the file the rc.2 desktop build shipped
  * (verified against the sha256 index in the app's own `dsh/desktop-runtime.json`),
  * so only its version string changed.
+ *
+ * 0.2.2-rc.1 *is* a real release — that bundle grew from 203572 to 225678 bytes,
+ * and every harness package gained `locale/*.json` files — but the decision this
+ * file tests did not move: extracted from both desktop runtimes,
+ * `evaluatePluginCompatibility` (630 bytes), its `unmetRequirements` walker
+ * (1033 bytes) and the `satisfies` helper (147 bytes) are byte-identical text.
+ * Peers still decide, so the ranges below are still the declaration that matters.
  */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -37,12 +44,15 @@ import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot';
 
 /**
  * Harness releases this plugin claims to run on. Add a line here when claiming
- * one. `0.2.1-rc.3` is what the desktop app (`@deepseek-ai/dsh-desktop`) ships as
- * its bundled runtime today, and npm's `next` tag points at the same version
- * while `latest` is still 0.2.1-rc.2 — so this list is checked by both
- * distributions, and the desktop one is the one that moves first.
+ * one. `0.2.2-rc.1` is what both distributions now carry: the desktop app
+ * (`@deepseek-ai/dsh-desktop`) bundles it as its runtime, and npm's `latest`
+ * *and* `next` point at it — the first baseline in this project's history where
+ * the two distributions agree, so there is nothing left to reconcile. The
+ * versions between the last two lines here (`0.2.1-rc.4`, `0.2.1-rc.5`,
+ * `0.2.2-alpha.*`) were published but never run against, so they are not
+ * claimed, even though the peer range admits them.
  */
-const SUPPORTED = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3'];
+const SUPPORTED = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.2-rc.1'];
 
 type Manifest = {
   name: string;

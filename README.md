@@ -9,8 +9,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/dsh-voice-call"><img src="https://img.shields.io/npm/v/dsh-voice-call" alt="npm version" /></a>
   <img src="https://img.shields.io/badge/harness-0.1.7--rc.2-5b5bd6" alt="DSH 0.1.7-rc.2" />
-  <img src="https://img.shields.io/badge/harness-0.2.1--rc.3-5b5bd6" alt="DSH 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 / 0.2.1-rc.3，声明范围 ^0.2.0-rc.1" />
-  <img src="https://img.shields.io/badge/desktop-DeepSeek%20Harness-5b5bd6" alt="桌面版（dsh-desktop）运行时 0.2.1-rc.3 已逐文件哈希核对" />
+  <img src="https://img.shields.io/badge/harness-0.2.2--rc.1-5b5bd6" alt="DSH 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 / 0.2.1-rc.3 / 0.2.2-rc.1，声明范围 ^0.2.0-rc.1" />
+  <img src="https://img.shields.io/badge/desktop-DeepSeek%20Harness-5b5bd6" alt="桌面版（dsh-desktop）运行时 0.2.2-rc.1 已逐文件哈希核对" />
   <img src="https://img.shields.io/badge/tests-302%20green-1f883d" alt="302 个测试全绿" />
 </p>
 
@@ -41,7 +41,7 @@
 
 > 旧版的命令行安装（`npm install -g @deepseek-ai/dsh`，然后 `dsh plugin --profile web add dsh-voice-call`）随全局 CLI 一起退役了——本机已卸载全局 DSH，插件管理请走桌面版界面。
 
-> 版本要求：需要 DSH 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 / 0.2.1-rc.3（桌面版当前带的就是 0.2.1-rc.3，npm 的 `latest` 在 0.2.1-rc.2、`next` 才指到 0.2.1-rc.3）。
+> 版本要求：需要 DSH 0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 / 0.2.1-rc.3 / 0.2.2-rc.1（桌面版当前带的运行时就是 0.2.2-rc.1，npm 的 `latest` 与 `next` 也指到同一版——这个项目历史上两份发行物头一回同版）。
 
 装完到 DSH 的**插件设置页**，「运行环境」区点一下就把引擎和模型装齐。然后开个会话，对 agent 说：*「你有 `offer_call` 工具——有什么值得说的就打电话给我。」*
 
@@ -79,26 +79,26 @@
 
 默认**关着**：设置卡里「等问题振铃（实验性新功能）」打开才生效。这一版其余改动——包括两处"插件能把宿主带走"的围栏——见 [docs/changelog.md](docs/changelog.md)。
 
-## 🖥 跑在新基线上：0.2.1-rc.3，以及桌面版和 npm 装的不一样
+## 🖥 跑在新基线上：0.2.2-rc.1，桌面版与 npm 这次是同一版
 
 dsh 0.2.0-rc.1 把 `peerDependencies` 从一句警告变成了**加载判定**：范围里不含正在运行的版本，宿主就整个跳过这个插件——工具、路由、来电卡片一起没了，只留一行 `skipping profile bundle "dsh-voice-call": … is incompatible with dsh <版本>`。0.3.7 正是这样消失的，而它 284 个测试全绿：没有一条测试读过清单。从 0.3.8 起范围写成 `^0.1.7-rc.2 || ^0.2.0-rc.1`（这一条臂覆盖整段 0.2.x），并把**宿主自己的判定函数**请进测试（`test/harness-compat.test.ts` 跑真清单）。
 
-**0.3.13 把基线抬到 0.2.1-rc.3，而这一版没有一行代码变化**：发出去的 `lib/index.js` 与 `lib/client.js` 和 0.3.12 那两份字节相同。桌面版和 npm 这次同时到了 rc.3（npm 的 `latest` 还在 0.2.1-rc.2，`next` 是 rc.3），规矩照旧以桌面版为准。peer 依然一个字没改——用宿主那个 `includePrerelease` 的 `satisfies()` 实测，`^0.2.0-rc.1` 本来就含 0.2.1-rc.3。声称的基线现在是五条：0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 / 0.2.1-rc.3，两份依赖树各跑一遍（三份 `tsc` + 302 个用例，两边都全绿）。
+**0.3.14 把基线抬到 0.2.2-rc.1；发出去的两份产物还是 0.3.13 那两份字节**（`lib/index.js` 19781、`lib/client.js` 70144，与 npm 上 0.3.13 的 tarball 回算的 sha256 一字不差）。这一版和 rc.3 那轮不同：**harness 自己动了**——比对的 24 个 harness 包里 15 个的服务端 JS 变了（cordis 4.0.5 → 4.1.0 自己也动了 `lib/index.js`），`dsh-app-boot/lib/index.js` 从 203572 长到 225678 字节，每个包都新增 `locale/{de,es,fr,ja,pt,ru}.json`，`dsh-tools` 的 `lib/types/` 重排（`ptc`、`ptc-calls`、`py-types`、`ts-types`、`testing`、`types` 六个文件没了，`contracts`、`executor`、`pipeline`、`batch`、`events` 顶上），`dsh-api-session-controller` 把 history / state / web 拆成了 controller+listener。**我们这边仍然一行源码没改**：迁移面查过了，符号都还在原地（`defineTool`、`GenericCallView`、`SessionEventLike`、`MessageId`、`JobOutcome` 逐个在两份树里回查过）。
 
-**判定函数这次没动**：`dsh-app-boot/lib/index.js` 在 rc.2 与 rc.3 两份桌面 asar 里字节相同（203572 字节），上一轮那两条语义（字段叫 `requirements`、清单写了 `engines.dsh` 就只看它）原样保留。**npm 侧 rc.2 → rc.3 也只有 `dsh-client-ui-conversation` 的客户端有一处真变化**（`lib/client.js` 重构建、8 个 `.d.ts` 改动、新增 `view-pins.d.ts`），而且全是加导出、什么都没删——我们 import 的那三个符号不在差异里。所以我们没做迁移，做的是"确认无东西可迁"。
+**加载判定这条链一步没动**：把 `evaluatePluginCompatibility`（630 字节）、它调用的 `unmetRequirements`（1033 字节）、`satisfies`（147 字节）从两份桌面 asar 里各自抠出来对比——**逐字节相同**。判定文件变胖是别的原因（profile 模板那批常量搬了家，外加 locale）。所以 peer 依旧一个字没改：`^0.1.7-rc.2 || ^0.2.0-rc.1` 本来就含 0.2.2-rc.1。devDependencies 里 22 个 harness 包抬到 0.2.2-rc.1，`@deepseek-ai/cordis` 从 `~4.0.5` 抬到 `~4.1.0`——运行时那份现在就是 cordis 4.1.0 / schemastery 3.19.0 / cosmokit 1.9.0。声称的基线六条：0.1.7-rc.2 / 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-rc.2 / 0.2.1-rc.3 / 0.2.2-rc.1，**三份依赖树各跑一遍**（三份 `tsc` + 302 个用例全绿）：新基线一份；0.1.7-rc.2 一份（只把 `dsh-app-boot` 抬到 0.2.2-rc.1，因为判定本身是 0.2.0-rc.1 才有的东西）；再加一份把 schemastery 钉在 3.19.0，也就是宿主真正在跑的那一份。
 
-0.3.12 那一轮把 devDependencies 抬到 0.2.1-rc.2，并第一次把桌面版那份运行时与 npm 那份逐文件比过；本轮同方法重跑，方法没变、结论也没变，只是数字更新，另外补上了两条新事实。
+0.3.12 那一轮把 devDependencies 抬到 0.2.1-rc.2，并第一次把桌面版那份运行时与 npm 那份逐文件比过；本轮同方法重跑（还是拿 app 自己的清单比发布物，不做抽取），方法没变、结论也没变，只是数字换了一套，另外核对了一条新的信任前提。
 
-**桌面版（Electron 44.7.0，node 24.21.0，pnpm 11.28.5）带的运行时是 0.2.1-rc.3**，比 npm 的稳定标签新一个版本。拿它自带的**逐文件 sha256 清单**（`dsh/desktop-runtime.json`，这次 17141 个文件）比一份 `npm install @deepseek-ai/dsh@0.2.1-rc.3`：
+**桌面版（Electron 44.7.0，node 24.21.0，pnpm 11.28.5）带的运行时是 0.2.2-rc.1**，`hostProtocolVersion` 仍是 4，`sharedPackages` 从 305 涨到 **329**。npm 的 `latest` 与 `next` 这版都指到 0.2.2-rc.1，所以"以桌面版为准"这条规矩这次不需要用来做裁决——两份发行物同版。拿 app 自带的**逐文件 sha256 清单**（`dsh/desktop-runtime.json`，这次 **21046** 个文件；先回算 `dsh-app-boot/lib/index.js` 与这份清单自己的 sha256，两处都对得上，索引可信）比我们声明的 24 个包的发布物：
 
-- 我们 import 的那 18 个 `@deepseek-ai/dsh-*` 包加 cordis / schemastery / cosmokit，**服务端 JS 全部字节相同**（声明的 24 个包里 292 个文件一字不差）。同版本号在两种发行物里是同一份代码——这条上一版被证明过一次，这一版再证明一次。
-- 差异现在只有三种，都不改变行为：`package.json` 被删掉 `scripts`；`.d.ts` 与 `.d.ts.map` 被剥光（所以桌面版那份树没法拿来编译，而本仓库一直用 npm 那份）；`dsh-client-ui-chat` / `dsh-client-ui-conversation` 的 `lib/client.js` 是**另一次构建**的产物。0.3.12 记下的第四类——若干桌面版独有的 `lib/types/invariant.js`——在 rc.3 的打包里**消失了**。
-- 客户端那条差异对我们无伤：只用相对路径和自己的类名（`dsh-voice-call-overlay` 那一套），不碰宿主的 module 类名；注入目标 `dsh-client-ui-settings` 的 `client.js` 两边字节相同。
-- 一条新事实：**桌面版运行时根本不携带 `@deepseek-ai/dsh-client-ui-slots`**（rc.2 那版也不带）。它是 devDependency 而不是 peer，`src/` 一行都没 import，所以宿主不会因此跳过我们——但别把 devDependencies 当运行时依赖看。反过来桌面版自己多带 9 个文件：`dsh-host-webserver` 里嵌了一整棵 `node_modules/negotiator/`，npm 靠 hoist 解析。
-- **真正要记的那条桌面版差异还在**：`desktop` profile 由 app 自己初始化（`nodeLinker: hoisted` + `autoInstallPeers: false`，模板就是 `web` 那两条 bundle），profile 树里除了插件本身只有 `@deepseek-ai/schemastery@3.18.4` 与 `cosmokit@1.8.5` 两份——我们和另外三个插件被 pnpm 注入到这两份上，而宿主自己跑的是 asar 里的 3.18.5 / 1.8.6。**同一个进程里两份 schemastery**。插件照常工作，因为我们交给宿主的 schema 走 plain 对象桥接、不做 `instanceof`；但这也意味着 peer 里的 `^3.18.4` **不能抬到 3.18.5**——抬了就把桌面版上那份真实存在的副本排除在声明之外了。
-- **宿主换了插件 bundle 的取法**：rc.3 的 boot manifest 广告的是 `plugins/??dsh-voice-call/client.js&rev=<hash>`，**不带 `&rev=` 直接打那个路径返回 404**（`dsh-client-modules` 的 `bundleResource()` 按 `pathname + search` 精确查表）。我们从不写死这个 URL，组合由宿主负责，所以插件不受影响；但"打一次就 200"这句旧文档说法已经不成立，本轮按 rc.3 实测改掉。
+- 我们 import 的那些 `@deepseek-ai/dsh-*` 包加 cordis / schemastery / cosmokit，**服务端 JS 全部字节相同**：24 个 harness 包里 400 个文件一字不差（服务端 JS 160、locale 128、文档 92、`package.json` 19、其他 1），另外三份支持包 cordis 4.1.0 / schemastery 3.19.0 / cosmokit 1.9.0 又对上一字不差 31 个文件、内容差异 0——它们被剥掉的只有 `.d.ts` 与 `.d.ts.map`。rc.3 那轮是 292 个；多出来主要就是新增的 locale 文件，两边一致。同版本号在两种发行物里是同一份代码：这条被证明了第三次。
+- 差异还是三种，都不改变行为：`package.json` 被删掉 `scripts`（4 个）；`.d.ts` 与 `.d.ts.map` 被剥光（365 个类型文件 + 4 个文档，桌面版那份树因此没法拿来编译，而本仓库一直用 npm 那份）；`dsh-client-ui-chat` / `dsh-client-ui-conversation` 的 `lib/client.js` 是**另一次构建**（大小差 158 与 7 字节，CSS module 盐不同）。
+- 客户端那条差异对我们无伤：只用相对路径和自己的类名（`dsh-voice-call-overlay` 那一套），不碰宿主的 module 类名；**注入目标 `dsh-client-ui-settings` 这一版的 `client.js` 两边字节相同，连 npm 侧 rc.3 → 0.2.2-rc.1 也没动过它**——我们那三张卡是靠它渲染的，这条值得单独记。
+- `@deepseek-ai/dsh-client-ui-slots` 仍然**不在桌面版运行时里**（rc.2 / rc.3 也都不在；被剥掉的那 2 个"非类型非文档"文件就是它的 `lib/index.js` 与 `package.json`）。它是 devDependency 而不是 peer，`src/` 一行都没 import，所以宿主不会因此跳过我们——但别把 devDependencies 当运行时依赖看。反过来桌面版自己多带 9 个文件：`dsh-host-webserver` 里嵌了一整棵 `node_modules/negotiator/`，npm 靠 hoist 解析。
+- **真正要记的那条桌面版差异还在，而且这次更宽**：`desktop` profile 由 app 自己初始化（`nodeLinker: hoisted` + `autoInstallPeers: false`，模板就是 `web` 那两条 bundle），profile 树里除了插件本身只有 `@deepseek-ai/schemastery@3.18.4` 与 `cosmokit@1.8.5` 两份——我们和另外三个插件被 pnpm 注入到这两份上，而宿主自己跑的是 asar 里的 **3.19.0 / 1.9.0**。**同一个进程里两份 schemastery，这次差了一个 minor**。插件照常工作，因为我们交给宿主的 schema 走 plain 对象桥接、不做 `instanceof`；peer 里的 `^3.18.4` 也**仍然不能抬**——抬了就把桌面版上那份真实存在的 3.18.4 排除在声明之外。为了不让"地板"变成唯一测过的东西，本轮另跑了一份把 schemastery 钉到 3.19.0 的树（302 全绿）。
+- **宿主换了插件 bundle 的取法**（rc.3 发现，0.2.2-rc.1 复核仍在）：boot manifest 广告的是 `plugins/??dsh-voice-call/client.js&rev=<hash>`，**不带 `&rev=` 直接打那个路径返回 404**（`dsh-client-modules` 的 `bundleResource()` 按 `pathname + search` 精确查表）。我们从不写死这个 URL，组合由宿主负责，所以插件不受影响；但"打一次就 200"那句旧文档说法已经不成立。
 
-**这一版把消费侧模拟重新做全了**：这台机器没有全局 CLI，但 harness home 可以用 `$DSH_HOME` 整个挪进临时目录——`npm i @deepseek-ai/dsh@0.2.1-rc.3` 之后 `dsh plugin --profile web add <tarball>`，boot 起来没有一行 `skipping profile bundle`，`--dump-config` 里我们的条目带着 `callMode: card` 与 `durableEvents: false`，只读端点 `/voice/call/state`、`/voice/provision/state` 全 200，客户端 bundle 按广告 URL 取到 200 / 70215 字节。
+**消费侧模拟这轮照旧做全**（这台机器没有全局 CLI，但 harness home 可以用 `$DSH_HOME` 整个挪进临时目录）：`npm i @deepseek-ai/dsh@0.2.2-rc.1` 到 scratch 目录，`dsh plugin --profile web add dsh-voice-call-0.3.14.tgz`，boot 起来 **没有一行 `skipping profile bundle`**；`--dump-config` 里我们的条目带着 `callMode: card` 与 `durableEvents: false`；只读端点 `/voice/call/state`、`/voice/provision/state`、`/voice/provision/disk` 全 200（这份 scratch home 是空的，所以 `phase: unprepared`、`variantId: win-cpu`、`tone: classic`——都是默认值，不是桌面版那份配置）；同端口 `GET /` 仍 401；客户端 bundle 按广告 URL（`rev=c8e6687c0aa0`）取到 **200 / 70215 字节 / text/javascript**，把 query 去掉就 404。
 
 设置卡、铃声试听、来电卡片这几项要在真界面里点一次才算验收——**插件不热加载**，换完版本记得重载或重启桌面版。完整表格在 [docs/deployment.md](docs/deployment.md#-桌面版兼容性全文)。
 
@@ -137,7 +137,7 @@ dsh 0.2.0-rc.1 把 `peerDependencies` 从一句警告变成了**加载判定**�
 ## 💻 兼容性
 
 - **平台** —— Windows 10/11、macOS、Linux 三平台都在 CI 上跑，302 个测试全绿。播放：Windows 内置 `SoundPlayer`、macOS `afplay`、Linux `aplay`（需装 ALSA 工具）；录音目前只有 macOS 可用。
-- **harness** —— 同时支持 `0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.0-rc.2`、`0.2.1-rc.2`、`0.2.1-rc.3`：`peerDependencies` 写成 `^0.1.7-rc.2 || ^0.2.0-rc.1`（后一条覆盖整段 0.2.x），devDependencies 与 CI 锁在 0.2.1-rc.3。从 0.2.0-rc.1 起这份声明决定**加载还是跳过**（不只是警告），0.2.1-rc.2 又让它多了一种走法（清单里写了 `engines.dsh` 就只看那一条），所以基线换版时它会跟着动，`test/harness-compat.test.ts` 用宿主自己的判定函数盯着它——连"`engines.dsh` 会把 peer 判定**闭嘴**"这件事现在都有负控钉着。**桌面版**（`@deepseek-ai/dsh-desktop`）当前带的运行时就是 0.2.1-rc.3，与 npm 同一版本做过逐文件哈希比对；共享包、scheme 转发、沙箱词表逐项核对见 [docs/deployment.md](docs/deployment.md#-桌面版兼容性全文)。
+- **harness** —— 同时支持 `0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.0-rc.2`、`0.2.1-rc.2`、`0.2.1-rc.3`、`0.2.2-rc.1`：`peerDependencies` 写成 `^0.1.7-rc.2 || ^0.2.0-rc.1`（后一条覆盖整段 0.2.x），devDependencies 与 CI 锁在 0.2.2-rc.1（cordis 4.1.0、schemastery 解析到 3.18.4 这块地板，另外单独跑了一份 3.19.0）。从 0.2.0-rc.1 起这份声明决定**加载还是跳过**（不只是警告），0.2.1-rc.2 又让它多了一种走法（清单里写了 `engines.dsh` 就只看那一条），所以基线换版时它会跟着动，`test/harness-compat.test.ts` 用宿主自己的判定函数盯着它——连"`engines.dsh` 会把 peer 判定**闭嘴**"这件事现在都有负控钉着；0.2.2-rc.1 这一版判定链逐字节没动（630 / 1033 / 147 字节三个函数抠出来对比过）。**桌面版**（`@deepseek-ai/dsh-desktop`）当前带的运行时也是 0.2.2-rc.1，与 npm 同一版本做过逐文件哈希比对；共享包、scheme 转发、沙箱词表逐项核对见 [docs/deployment.md](docs/deployment.md#-桌面版兼容性全文)。
 - **`durableEvents` 请保持 `false`** —— 插件事件没有注册入口，写入 `voice/*` 事件会让那份会话历史再也加载不了。这条是实测到的，别的新版本上未验证过开启的后果。
 - **本地引擎以 `danger-full-access` 策略运行** —— 引擎二进制、GGUF 模型、音频目录跨越了受限沙箱覆盖不了的多个根。**部署前请评估这条信任边界。**
 
@@ -172,7 +172,7 @@ pnpm build       # tsc + 客户端 bundle
 
 ## 🗺 路线图
 
-已发布到 0.3.13：通话域 → 专属来电卡片 → 一键装配与 11 条铃声 → 三平台复核 → 等问题振铃 → 跟上 dsh 0.2.0-rc.1/rc.2 与桌面版 → 第一次装好浮出来的就是那张卡片（四处默认值终于对齐，并加了一条防漂移的守卫）→ 重载之后卡片照样来电（三条路由随插件实例一起释放，不再活得比它久）→ 基线跟上 0.2.1-rc.2 并把桌面版那份与 npm 那份逐文件哈希比对 → **基线再跟上 0.2.1-rc.3**（一行代码没变，把宿主新的 `&rev=` bundle 取法测清楚，并把消费侧模拟搬进 `$DSH_HOME` 重跑一遍）。下一版：**错过来电的语音信箱 + AI 已读回执**（`src/domain/voicemail.ts`，事件类型已预留）。v1.0 冻结 schema，发布稳定版。
+已发布到 0.3.14：通话域 → 专属来电卡片 → 一键装配与 11 条铃声 → 三平台复核 → 等问题振铃 → 跟上 dsh 0.2.0-rc.1/rc.2 与桌面版 → 第一次装好浮出来的就是那张卡片（四处默认值终于对齐，并加了一条防漂移的守卫）→ 重载之后卡片照样来电（三条路由随插件实例一起释放，不再活得比它久）→ 基线跟上 0.2.1-rc.2 并把桌面版那份与 npm 那份逐文件哈希比对 → 基线再跟上 0.2.1-rc.3（一行代码没变，把宿主新的 `&rev=` bundle 取法测清楚，并把消费侧模拟搬进 `$DSH_HOME` 重跑一遍）→ **基线跟上 0.2.2-rc.1**（这轮 harness 自己动了代码：判定链逐字节没变、我们的产物也还是那两份字节，但依赖树换到了 cordis 4.1.0，并且多跑了一份宿主真正在用的 schemastery 3.19.0）。下一版：**错过来电的语音信箱 + AI 已读回执**（`src/domain/voicemail.ts`，事件类型已预留）。v1.0 冻结 schema，发布稳定版。
 
 ## 🤖 署名 —— 这个项目是谁做的
 
